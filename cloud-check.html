@@ -162,19 +162,22 @@ async function run() {
   set(3, 'ok', 'Connected', good.url);
   try { localStorage.setItem('mrlCloudDatabaseURL', good.url); } catch (e) {}
 
-  /* 4 — rules: likhna + mitana */
-  var testPath = '_doctor/' + Date.now();
+  /* 4 — rules: likhna + mitana
+     NOTE: test WAHI raasta use karta hai jo sync karta hai — shops/<Shop ID>/...
+     (root par likhne ki koshish karna ghalat test tha: rules sirf shops/ ke
+     andar ijazat dete hain, is liye wahan permission denied aana normal hai.) */
+  var testPath = 'shops/' + SHOP_ID + '/_doctor/' + Date.now();
   try {
     await good.rdb.ref(testPath).set({ t: Date.now() });
     await good.rdb.ref(testPath).remove();
-    set(4, 'ok', 'Likhne ki ijazat hai (test likha aur delete kar diya)');
+    set(4, 'ok', 'Likhne ki ijazat hai (test likha, foran delete kar diya)', 'shops/' + SHOP_ID);
   } catch (e) {
     var msg = (e && e.message) || String(e);
     var perm = /permission|denied/i.test(msg);
     set(4, 'bad', perm ? 'Permission denied — Rules publish karein' : 'Write fail', msg);
     verdict('bad', '❌ Database connect hai magar likhne ki ijazat nahi',
       perm
-        ? 'Firebase Console → Realtime Database → <b>Rules</b> mein yeh JSON paste karein aur <b>Publish</b> dabayein:<br>'
+        ? 'Firebase Console → <b>Realtime Database</b> → <b>Rules</b> mein yeh JSON paste karein aur <b>Publish</b> dabayein:<br>'
           + '<pre>{\n  "rules": {\n    "shops": {\n      "$shopId": {\n        ".read": true,\n        ".write": true\n      }\n    }\n  }\n}</pre>'
         : 'Error: <code>' + msg + '</code>');
     return;
