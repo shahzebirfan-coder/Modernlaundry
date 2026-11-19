@@ -573,3 +573,78 @@ Naye order mein **Advance** aur **Partial** tab kholne par "Amount Received Now"
 - `tpospay.js` — 8 checks: Advance/Partial khali, Credit 0 + clear message, typing se due recalculate, Full tab poora amount.
 - Purane suites (discount, delivery charge, invoice, Press) dobara pass.
 - Visual: `preview/payment-fix.pdf`.
+
+
+---
+
+## 15. Cloud Sync (Multi-Device) — Firebase configure ho gaya
+
+### 15.1 Config (software ke andar save)
+`assets/js/firebase-defaults.js` mein maalik ka Firebase project mojood hai:
+
+| Field | Value |
+|---|---|
+| Project | `maundrylaundrypos` |
+| App ID | `1:194444859124:web:d01c1fa1038e896fd9f0a1` |
+| Shop ID (data ka naam) | `modern-laundry-main` |
+
+Ye sirf **public web config** hai (Firebase apiKey public hota hai) — asal hifazat **Firestore Rules** se hoti hai.
+
+### 15.2 Client ko karna kya hai (bas 2 kaam)
+1. **Firebase Console → Firestore Database → Rules** kholain aur `FIREBASE-RULES.txt` ka content paste kar ke **Publish** karein
+   (ye zaroori hai — warna device connect ho kar data read/write nahi kar sakega; `/tables/{tableId}` path bhi included hai).
+2. **POS → Settings → Cloud Sync (Multi-Device) → "☁️ Cloud Sync ON karein"** — bas ek click. Page khud reload hoga.
+
+**Har naye device (mobile / PC / tablet) par bhi wahi ek button** — koi config type karne ki zaroorat nahi.
+Agar button na dikhe (sync pehle se ON) to Settings → Cloud Sync → *Merge Now* / *Force Push* / *Force Pull* mojood hain.
+
+### 15.3 Andar kya theek kiya
+| Issue | Fix |
+|---|---|
+| Config har device par manually paste karna parta tha | Bundled defaults + **1-click ON** (Settings card + auto-connect on first run) |
+| Settings mein Cloud Sync card **do dafa** aata tha (duplicate) | Ek card reh gaya, us par live ✅ ON / ⏸️ OFF badge |
+| "Enable" button ka order ghalat tha — pehle `push()` chalta tha jab sync abhi OFF hota, is liye data cloud par jata hi nahi tha | Ab: `enabled = true` → **push** → pull/merge → listen |
+| Portal ki config khaali thi (customer portal cloud se data nahi padh sakta tha) | Portal mein wahi project + shop id hard-wired |
+| Portal cloud se aaya data **replace** kar deta tha (puraani copy naya data uda sakti thi) | Ab **merge** — jo record jis device par aakhri baar badla wohi jeetta, delete bhi respect hota hai |
+| Cloud band hone par sirf "Needs attention" popup aata tha | Popup/again ka button ab direct **"☁️ Cloud Sync ON karein"** |
+
+### 15.4 Sync kaise chalta hai (short)
+- Har table (orders, customers, products, settings…) alag doc mein — 800KB se bara ho to **chunks** mein toot kar jata hai (unlimited data).
+- Har save ke 1.5 second baad auto push; doosre device par Firestore snapshot se foran pull + merge.
+- Merge rule: `updatedAt` naya wala jeetta hai (kabhi bhi doosre device ka purana data naye ko overwrite nahi karta).
+- Har record par `deviceId` / `deviceLabel` / `updatedBy` — pata chalta hai kis device ne badla.
+
+### 15.5 Test (verified)
+`tcloud.js` — 20 checks green: config bina typing ke milti hai, shop id auto, manual config override karta hai,
+Settings par 1-click button + duplicate card khatam, portal same project/shop use karta hai, portal merge karta hai
+(replace nahi), merge mein naya record jeetta hai, local-only record bachta hai, aur cloud par delete kiya record
+dobara zinda nahi hota.
+
+
+---
+
+## 15A. "Configure Cloud Sync (IT Admin)" button kaam nahi kar raha tha — FIX
+
+### Kya masla tha
+Settings mein Cloud Sync ka card **do buttons mein se sirf ek** dikhata tha:
+jab software ke andar Firebase config mojood ho aur sync OFF ho, to purana
+"🔄 Configure Cloud Sync (IT Admin)" button **gayab** ho jata tha aur sirf ek
+naya quick button reh jata tha. Woh quick button sidha connect karne lagta tha —
+koi window khulti hi nahi thi, aur connection fail hone par kuch nazar nahi aata tha.
+(Client ke yahan bilkul yahi hua: button dabaya, kuch nahi hua.)
+
+### Ab
+| Button | Kya karta hai |
+|---|---|
+| **⚙️ Cloud Sync Settings kholein** | Hamesha mojood — manager window kholta hai (config, shop id, status, buttons) |
+| **☁️ Cloud Sync ON karein (1 click)** | Manager kholta hai aur khud connect shuru karta hai (progress andar nazar aati hai) |
+| **🔒 Advanced (IT Admin password)** | Merge / Force Push / Force Pull / Pause — sirf password ke baad |
+| **🔌 Connection test karein** | Firebase se test: "cloud par data mojood hai (X KB)" ya "permission denied → Rules publish karein" |
+
+- Password prompt ab **sirf advanced (khatarnaak) kaamon** par — connect karne ke liye nahi.
+- Manager ke andar bhi ab **hamesha** ek button mojood hai: sync OFF ho to "ON karein", ON ho to Merge/Push/Pull/Pause.
+- Sync ON hone par toast bhi aata hai: *"✅ Cloud Sync ON — data cloud par mehfooz"*.
+
+### Test (verified)
+`tcloudbtn3.js` — Firebase mock ke sath poora flow green: Settings ka button → manager khulta hai →
+"ON karein" → 29 tables push + main doc + real-time listener + chunked format + user ko message.

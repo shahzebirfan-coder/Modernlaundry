@@ -276,17 +276,20 @@ function renderSettings() {
           ${(s.masterRecoveryCodeHash||s.masterRecoveryCode) ? `<small style="display:block;text-align:center;color:#78350f;margin-top:8px;">Set on: ${new Date(s.masterRecoveryCodeSetAt||Date.now()).toLocaleDateString()} · stored as a one-way hash</small>` : ''}
         </div>
 
-        <div class="card" style="margin-bottom:20px;">
-          <p style="color:var(--text-soft);font-size:12px;margin-bottom:14px;">Real-time sync via Firebase. Premium feature. Contact IT Department to enable.</p>
-          <button class="btn btn-primary btn-block" id="openCloudBtn">🔄 Configure Cloud Sync (IT Admin)</button>
-          <div id="cloudStatus" style="font-size:11px;color:var(--text-soft);margin-top:8px;text-align:center;"></div>
-        </div>
 
-        
         <div class="card" style="margin-bottom:20px;">
-          <div class="card-header"><h3>🔄 Cloud Sync (Multi-Device)</h3></div>
-          <p style="color:var(--text-soft);font-size:12px;margin-bottom:14px;">Real-time sync via Firebase. Premium feature. Contact IT Department to enable.</p>
-          <button class="btn btn-primary btn-block" id="openCloudBtn">🔄 Configure Cloud Sync (IT Admin)</button>
+          <div class="card-header"><h3>🔄 Cloud Sync (Multi-Device)
+            <span class="badge" style="background:${(typeof CLOUD !== 'undefined' && CLOUD.isEnabled()) ? '#10b981' : '#ef4444'};color:#fff;">${(typeof CLOUD !== 'undefined' && CLOUD.isEnabled()) ? '✅ ON' : '⏸️ OFF'}</span>
+          </h3></div>
+          <p style="color:var(--text-soft);font-size:12px;margin-bottom:14px;">
+            Mobile / PC / tablet — sab par ek hi data. Project pehle se configured hai.
+          </p>
+          <button class="btn btn-primary btn-block btn-lg" id="openCloudBtn" style="font-weight:800;">⚙️ Cloud Sync Settings kholein</button>
+          ${(typeof CLOUD !== 'undefined' && !CLOUD.isEnabled() && CLOUD.hasDefaults()) ? `
+            <button class="btn btn-success btn-block" id="cloudQuickOn" style="margin-top:8px;font-weight:800;">☁️ Cloud Sync ON karein (1 click)</button>
+            <small style="display:block;text-align:center;color:var(--text-soft);margin-top:6px;">Har naye device par yehi button dabana hai</small>
+          ` : ''}
+          <button class="btn btn-ghost btn-block btn-sm" id="cloudAdvancedBtn" style="margin-top:8px;">🔒 Advanced (IT Admin password)</button>
           <div id="cloudStatus" style="font-size:11px;color:var(--text-soft);margin-top:8px;text-align:center;"></div>
         </div>
 
@@ -526,8 +529,19 @@ function renderSettings() {
     promptPasswordModal('Access GDrive Settings', () => openGDriveManager());
   };
   if ($('#openMasterCodeBtn')) $('#openMasterCodeBtn').onclick = () => openMasterCodeSetup();
-  if ($('#openCloudBtn')) $('#openCloudBtn').onclick  = () => {
-    promptPasswordModal('Access Cloud Sync Settings', () => openCloudSyncManager());
+  /* Main entry — ab password ke baghair khulta hai (config pehle se app ke andar hai) */
+  if ($('#openCloudBtn')) $('#openCloudBtn').onclick = () => {
+    if (typeof openCloudSyncManager === 'function') openCloudSyncManager();
+    else toast('Cloud Sync module load nahi hua — page refresh karein (Ctrl+Shift+R)', 'error');
+  };
+  /* 1-click ON — manager khulta hai aur andar progress dikhta hai */
+  if ($('#cloudQuickOn')) $('#cloudQuickOn').onclick = () => {
+    if (typeof openCloudSyncManager === 'function') openCloudSyncManager({ autoEnable: true });
+    else toast('Cloud Sync module load nahi hua — page refresh karein (Ctrl+Shift+R)', 'error');
+  };
+  /* Advanced (destructive actions) — IT Admin password ke peeche */
+  if ($('#cloudAdvancedBtn')) $('#cloudAdvancedBtn').onclick = () => {
+    promptPasswordModal('Cloud Sync — Advanced (IT Admin)', () => openCloudSyncManager({ advanced: true }));
   };
   if ($('#openSubBtnTop')) $('#openSubBtnTop').onclick = () => openSubscriptionManager();
   // Status indicators

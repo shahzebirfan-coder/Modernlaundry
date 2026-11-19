@@ -1,4 +1,4 @@
-const CACHE_NAME = 'modern-dry-cleaners-pos-v26';
+const CACHE_NAME = 'modern-dry-cleaners-pos-v28';
 const urlsToCache = [
   './',
   './index.html',
@@ -15,6 +15,7 @@ const urlsToCache = [
   './assets/js/guard.js',
   './assets/js/client-config.js',
   './assets/js/cloud-autoconfig.js',
+  './assets/js/firebase-defaults.js',
   './assets/js/cloudsync.js',
   './assets/js/components.js',
   './assets/js/db.js',

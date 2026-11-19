@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ------------------------------------------------------------
+       Modern Laundry — Cloud Sync rules
+       Ye rules Firebase Console → Firestore Database → Rules mein
+       paste kar ke Publish karein. (Sirf inhe allow karna hai.)
+       ------------------------------------------------------------ */
+
+    match /shops/{shopId} {
+      allow read, write: if true;
+
+      match /tables/{tableId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}

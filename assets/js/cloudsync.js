@@ -58,13 +58,32 @@ const CLOUD = {
   _lastPushedJson: {},
   _toastDebounceTimer: null,
 
+  /* Bundled defaults (assets/js/firebase-defaults.js) — is se naye device par
+     kuch type kiye baghair Cloud Sync on ho jata hai. */
+  getDefaultConfig() {
+    const d = (typeof window !== 'undefined' && window.FIREBASE_DEFAULT_CFG)
+      || (typeof FIREBASE_DEFAULT_CFG !== 'undefined' ? FIREBASE_DEFAULT_CFG : null);
+    return (d && d.apiKey) ? d : null;
+  },
+  getDefaultShopId() {
+    return (typeof window !== 'undefined' && window.FIREBASE_DEFAULT_SHOP_ID)
+      || (typeof FIREBASE_DEFAULT_SHOP_ID !== 'undefined' ? FIREBASE_DEFAULT_SHOP_ID : '');
+  },
+  hasDefaults() { return !!this.getDefaultConfig(); },
+
   getConfig() {
     const raw = localStorage.getItem(this.CFG_KEY);
-    if (!raw) return null;
-    try { return JSON.parse(raw); } catch(e) { return null; }
+    if (raw) { try { const c = JSON.parse(raw); if (c && c.apiKey) return c; } catch(e) {} }
+    return this.getDefaultConfig();      // fallback: bundled project
   },
   setConfig(cfg) { localStorage.setItem(this.CFG_KEY, JSON.stringify(cfg)); },
-  getShopId() { return localStorage.getItem(this.SHOP_KEY) || ''; },
+  getShopId() {
+    const saved = localStorage.getItem(this.SHOP_KEY);
+    if (saved) return saved;
+    const def = this.getDefaultShopId();
+    if (def) { localStorage.setItem(this.SHOP_KEY, def); return def; }
+    return '';
+  },
   setShopId(id) { localStorage.setItem(this.SHOP_KEY, id); },
   isEnabled() { return localStorage.getItem(this.ENABLED_KEY) === 'true'; },
   setEnabled(v) { localStorage.setItem(this.ENABLED_KEY, v?'true':'false'); },
@@ -365,6 +384,15 @@ const CLOUD = {
       }
       return;
     }
+    // Pehli dafa / naya device: bundled config ho to khud connect ho jaye
+    if (CLOUD.hasDefaults() && !CLOUD.isEnabled()) {
+      try {
+        await enableCloudSyncQuick();
+      } catch (e) {
+        showCloudRecoveryPrompt('Cloud sync could not start: ' + e.message);
+      }
+      return;
+    }
     if (CLOUD.isReady() && !CLOUD.isEnabled()) {
       showCloudRecoveryPrompt('Cloud Sync is paused. Re-enable to sync your data?');
     }
@@ -383,10 +411,40 @@ function showCloudRecoveryPrompt(msg) {
       '<p style="font-size:13px;color:var(--text-soft);margin-bottom:16px;">Your data is safe — we just need to re-connect to your cloud database.</p>' +
       '<div style="display:flex;gap:8px;justify-content:center;">' +
       '<button class="btn btn-ghost" onclick="closeModal()">Later</button>' +
-      '<button class="btn btn-primary" onclick="closeModal();reconnectCloudSync();">🔄 Re-Enable Sync</button>' +
+      '<button class="btn btn-primary" onclick="closeModal();enableCloudSyncQuick();">☁️ Cloud Sync ON karein</button>' +
       '</div></div>');
   }, 2000);
 }
+
+/* ============================================================
+   ONE-CLICK CONNECT — bundled Firebase config ke sath
+   (Settings → Cloud Sync → "Cloud Sync On karein")
+   ============================================================ */
+async function enableCloudSyncQuick(shopId) {
+  const toast2 = (m, ty) => { if (typeof toast === 'function') toast(m, ty || 'success'); };
+  const cfg = CLOUD.getDefaultConfig();
+  if (!cfg) { toast2('Cloud config nahi mili — Settings se Firebase config paste karein', 'error'); return false; }
+  try {
+    CLOUD.setConfig(cfg);
+    CLOUD.setShopId((shopId || CLOUD.getDefaultShopId() || 'modern-laundry-main').trim());
+    toast2('☁️ Cloud se connect ho rahe hain…');
+    await CLOUD.init();
+    await CLOUD.pullAndMerge();
+    await CLOUD.push();
+    CLOUD.setEnabled(true);
+    await CLOUD.listen();
+    CLOUD._initialMergeDone = true;
+    if (typeof logAction === 'function') logAction('cloud.enable', CLOUD.getShopId());
+    toast2('✅ Cloud Sync ON — sab devices ab sync honge', 'success');
+    setTimeout(() => location.reload(), 1200);
+    return true;
+  } catch (e) {
+    console.warn('[CloudSync] quick connect failed', e);
+    toast2('Connect nahi hua: ' + e.message, 'error');
+    return false;
+  }
+}
+window.enableCloudSyncQuick = enableCloudSyncQuick;
 
 async function reconnectCloudSync() {
   if (!CLOUD.isReady()) {
@@ -472,7 +530,8 @@ async function reconnectCloudSync() {
 })();
 
 /* ============== UI ============== */
-function openCloudSyncManager() {
+function openCloudSyncManager(opts) {
+  opts = opts || {};
   const cfg = CLOUD.getConfig();
   const shopId = CLOUD.getShopId();
   const enabled = CLOUD.isEnabled();
@@ -484,6 +543,12 @@ function openCloudSyncManager() {
     <h3>☁️ Cloud Sync (Multi-Device)</h3>
     <p class="sub">Real-time sync via Firebase. <b>Chunked storage</b> — supports unlimited data size!</p>
 
+    ${(cfg && CLOUD.hasDefaults() && !enabled) ? `
+      <div style="background:#dcfce7;border-left:4px solid var(--success);padding:12px;border-radius:8px;margin-bottom:14px;font-size:13px;">
+        ✅ <b>Cloud ready hai</b> — project <code>${escapeHtml(cfg.projectId || '')}</code> software ke sath pehle se configured hai.
+        Neeche <b>"Cloud Sync ON karein"</b> dabayein, bas.
+      </div>
+    ` : ''}
     ${!cfg ? `
       <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px;border-radius:8px;margin-bottom:14px;font-size:13px;">
         ⚠️ <b>One-time setup required.</b> You need a free Firebase project (5 minutes).
@@ -492,8 +557,8 @@ function openCloudSyncManager() {
     ` : ''}
 
     <div class="field">
-      <label>Firebase Config JSON</label>
-      <textarea id="fbCfg" rows="8" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:11px;">${cfg ? escapeHtml(JSON.stringify(cfg, null, 2)) : ''}</textarea>
+      <label>Firebase Config JSON ${CLOUD.hasDefaults() ? '<small style="color:var(--text-soft);font-weight:400;">(pehle se bhara hua — chhedne ki zaroorat nahi)</small>' : ''}</label>
+      <textarea id="fbCfg" rows="6" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:11px;">${cfg ? escapeHtml(JSON.stringify(cfg, null, 2)) : ''}</textarea>
     </div>
 
     <div class="form-row">
@@ -517,13 +582,26 @@ function openCloudSyncManager() {
 
     <div style="display:flex;flex-direction:column;gap:8px;">
       ${!enabled ? `
-        <button class="btn btn-success btn-block" id="enableBtn">✅ Enable Cloud Sync</button>
-      ` : `
+        <button class="btn btn-success btn-block btn-lg" id="enableBtn" style="font-size:16px;padding:14px;">☁️ Cloud Sync ON karein (1 click)</button>
+        <small style="color:var(--text-soft);font-size:11px;text-align:center;">Yehi button har naye device (PC / mobile) par dabana hai — data khud aa jayega.</small>
+      ` : ''}
+      ${(enabled || opts.advanced) ? `
         <button class="btn btn-success" id="mergeNowBtn">🔄 Merge Now (Pull + Push)</button>
         <button class="btn btn-primary" id="pushNowBtn">⬆️ Force Push This Device → Cloud</button>
         <button class="btn btn-warning" id="pullNowBtn">⬇️ Force Pull Cloud → This Device (OVERWRITE)</button>
         <button class="btn btn-danger" id="disableBtn">⏸️ Pause Cloud Sync</button>
+      ` : `
+        <details style="margin-top:4px;">
+          <summary style="cursor:pointer;font-size:12px;color:var(--text-soft);">Advanced options (Merge / Push / Pull / Pause)</summary>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+            <button class="btn btn-success" id="mergeNowBtn">🔄 Merge Now (Pull + Push)</button>
+            <button class="btn btn-primary" id="pushNowBtn">⬆️ Force Push This Device → Cloud</button>
+            <button class="btn btn-warning" id="pullNowBtn">⬇️ Force Pull Cloud → This Device (OVERWRITE)</button>
+            <button class="btn btn-danger" id="disableBtn">⏸️ Pause Cloud Sync</button>
+          </div>
+        </details>
       `}
+      <button class="btn btn-ghost btn-sm" id="testConnBtn" style="margin-top:6px;">🔌 Connection test karein</button>
     </div>
 
     <div id="syncLog" style="margin-top:10px;font-size:12px;"></div>
@@ -541,25 +619,51 @@ function openCloudSyncManager() {
 
     $('#enableBtn', m)?.addEventListener('click', async () => {
       const cfgText = $('#fbCfg', m).value.trim();
-      const shop = $('#shopId', m).value.trim();
-      if (!cfgText || !shop) { log('Fill in both Config JSON and Shop ID','error'); return; }
+      const shop = ($('#shopId', m).value || '').trim() || CLOUD.getDefaultShopId();
+      if (!cfgText || !shop) { log('Config ya Shop ID khali hai', 'error'); return; }
       try {
         const parsed = parseFirebaseConfig(cfgText);
-        if (!parsed.apiKey || !parsed.projectId) throw new Error('Invalid config — missing apiKey or projectId');
+        if (!parsed.apiKey || !parsed.projectId) throw new Error('Invalid config — apiKey ya projectId nahi mila');
         CLOUD.setConfig(parsed);
         CLOUD.setShopId(shop);
-        log('Connecting to Firebase...');
+        CLOUD.setEnabled(true);          // pehle ON — warna push() chup chaap kuch nahi karta
+        log('☁️ Firebase se connect ho rahe hain…');
         await CLOUD.init();
-        log('Pulling + merging existing cloud data...');
-        await CLOUD.pullAndMerge();
-        log('Pushing merged data (chunked)...');
+        log('⬆️ Is device ka data cloud par bheja ja raha hai…');
         await CLOUD.push();
-        CLOUD.setEnabled(true);
+        log('⬇️ Cloud se data merge ho raha hai…');
+        await CLOUD.pullAndMerge();
         await CLOUD.listen();
-        log('✅ Connected! Real-time sync active.', 'success');
+        CLOUD._initialMergeDone = true;
         if (typeof logAction === 'function') logAction('cloud.enable', shop);
-        setTimeout(() => { closeModal(); location.reload(); }, 1500);
-      } catch(e) { log('❌ ' + e.message, 'error'); }
+        log('✅ Connected! 3 second mein page reload hoga…', 'success');
+        if (typeof toast === 'function') toast('✅ Cloud Sync ON — data cloud par mehfooz', 'success');
+        setTimeout(() => location.reload(), 1800);
+      } catch(e) { CLOUD.setEnabled(false); log('❌ ' + e.message, 'error'); }
+    });
+
+    /* auto-enable mode (Settings → "Cloud Sync ON karein") */
+    if (opts.autoEnable && $('#enableBtn', m)) setTimeout(() => $('#enableBtn', m).click(), 150);
+
+    $('#testConnBtn', m)?.addEventListener('click', async () => {
+      log('🔌 Firebase se test connection…');
+      try {
+        const db = await CLOUD.init();
+        const shop = CLOUD.getShopId();
+        if (!shop) throw new Error('Shop ID khali hai');
+        const doc = await db.collection('shops').doc(shop).get();
+        if (doc.exists) {
+          const d2 = doc.data() || {};
+          log('✅ Connection OK — cloud par data mojood hai (' + Math.round((d2.totalSize || 0)/1024) + ' KB, ' + (d2.updatedBy || '?') + ')', 'success');
+        } else {
+          log('✅ Connection OK — lekin cloud khali hai. "Cloud Sync ON karein" dabayein, data upload ho jayega.', 'success');
+        }
+      } catch (e) {
+        const msg = /permission|insufficient/i.test(e.message)
+          ? '❌ Permission denied — Firebase Console → Firestore → Rules mein FIREBASE-RULES.txt paste karke Publish karein'
+          : '❌ ' + e.message;
+        log(msg, 'error');
+      }
     });
 
     $('#mergeNowBtn', m)?.addEventListener('click', async () => {
@@ -593,7 +697,7 @@ function openCloudSyncManager() {
     $('#disableBtn', m)?.addEventListener('click', () => {
       CLOUD.setEnabled(false); CLOUD.stop();
       toast('Cloud sync paused','success');
-      closeModal(); openCloudSyncManager();
+      closeModal(); openCloudSyncManager({ advanced: true });
     });
   }});
 }

@@ -819,8 +819,8 @@
   <script src="assets/js/db.js"></script>
   <script src="assets/js/utils.js"></script>
   <script src="assets/js/portal-helpers.js"></script>
-  <script src="assets/js/pickup-ops.js?v=20261119.10"></script>
-  <script src="assets/js/occasions.js?v=20261119.10"></script>
+  <script src="assets/js/pickup-ops.js?v=20261119.12"></script>
+  <script src="assets/js/occasions.js?v=20261119.12"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script>
@@ -835,15 +835,19 @@
        A new owner configures Firebase once in the POS and this page
        picks it up automatically on next load.
        ------------------------------------------------------------------ */
+    /* Maalik ka Firebase project — portal isi se live data padhta hai.
+       (Sirf public web config; asal hifazat Firestore rules se hoti hai.) */
     const HARDCODED_FIREBASE_CFG = {
-      apiKey: "",
-      authDomain: "",
-      projectId: "",
-      storageBucket: "",
-      messagingSenderId: "",
-      appId: ""
+      apiKey:            "AIzaSyDENRfrIpq0cEQJokXQcRFTNv7ldcVxLiw",
+      authDomain:        "maundrylaundrypos.firebaseapp.com",
+      projectId:         "maundrylaundrypos",
+      storageBucket:     "maundrylaundrypos.firebasestorage.app",
+      messagingSenderId: "194444859124",
+      appId:             "1:194444859124:web:d01c1fa1038e896fd9f0a1",
+      measurementId:     "G-VPWTRXT56V"
     };
-    const HARDCODED_SHOP_ID = '';
+    /* Har device par yehi Shop ID — POS ki Settings mein bhi yehi likha hai */
+    const HARDCODED_SHOP_ID = 'modern-laundry-main';
 
     function readSavedFirebaseCfg() {
       try {
@@ -904,9 +908,25 @@
           }
         }
         
-        if (fetched.orders) DB._data.orders = fetched.orders;
-        if (fetched.customers) DB._data.customers = fetched.customers;
-        if (fetched.products) DB._data.products = fetched.products;
+        /* MERGE (replace nahi) — jo record jis device par aakhri baar badla,
+           wohi jeetta hai. Is se cloud ki purani copy naya data nahi udaati. */
+        const mergeRows = (table, remoteRows) => {
+          if (!Array.isArray(remoteRows)) return;
+          const byId = {};
+          (DB._data[table] || []).forEach(r => { if (r && r.id) byId[r.id] = r; });
+          remoteRows.forEach(r => {
+            if (!r || !r.id) return;
+            const cur = byId[r.id];
+            if (!cur) { byId[r.id] = r; return; }
+            const curTs = +new Date(cur.updatedAt || cur.createdAt || 0) || 0;
+            const newTs = +new Date(r.updatedAt || r.createdAt || 0) || 0;
+            if (newTs >= curTs) byId[r.id] = r;
+          });
+          DB._data[table] = Object.values(byId).filter(r => r && !r._deleted);
+        };
+        mergeRows('orders', fetched.orders);
+        mergeRows('customers', fetched.customers);
+        mergeRows('products', fetched.products);
         if (fetched.settings) {
            DB._data.settings = Object.assign({}, DB._data.settings, fetched.settings);
            const s = DB._data.settings;
@@ -1545,6 +1565,6 @@
       } catch(e){ console.warn('terms load failed', e); }
     })();
   </script>
-  <script src="assets/js/guard.js?v=20261119.10"></script>
+  <script src="assets/js/guard.js?v=20261119.12"></script>
 </body>
 </html>
