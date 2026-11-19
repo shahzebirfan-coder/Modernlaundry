@@ -265,16 +265,18 @@
     //    Only fill this block in if you deliberately want to hard-code a
     //    different project for this page alone.
     const HARDCODED_FIREBASE_CFG = {
-      apiKey: "",
-      authDomain: "",
-      projectId: "",
-      storageBucket: "",
-      messagingSenderId: "",
-      appId: ""
+      apiKey:            "AIzaSyDENRfrIpq0cEQJokXQcRFTNv7ldcVxLiw",
+      authDomain:        "maundrylaundrypos.firebaseapp.com",
+      projectId:         "maundrylaundrypos",
+      storageBucket:     "maundrylaundrypos.firebasestorage.app",
+      messagingSenderId: "194444859124",
+      appId:             "1:194444859124:web:d01c1fa1038e896fd9f0a1",
+      measurementId:     "G-VPWTRXT56V",
+      databaseURL:       "https://maundrylaundrypos-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
 
     // 3) Shop ID — also taken automatically from the POS Cloud Sync settings.
-    const HARDCODED_SHOP_ID = '';
+    const HARDCODED_SHOP_ID = 'modern-laundry-main';
 
     /* ---- resolved at runtime from what the POS saved (cloudsync.js) ---- */
     function readSavedFirebaseCfg() {
@@ -306,7 +308,9 @@
       lockScreen.classList.add('hidden');
       dashboard.classList.remove('hidden');
       sessionStorage.setItem(SESSION_KEY, '1');
-      startDashboard();
+      /* startDashboard neeche define hai (let _refreshTimer bhi neeche) — is liye
+         isi tick par call karte hain, warna "before initialization" error aata tha */
+      setTimeout(startDashboard, 0);
     }
     /* ---- PIN verifier (PBKDF2, no plaintext in storage) ---- */
     const CODE_KEY = 'mdcCodeVaultV1';
@@ -415,7 +419,52 @@
       }
     }
 
-    let _db = null;
+    /* ---------------- Realtime Database support ----------------
+       POS ka sync Firestore ya Realtime Database par chal sakta hai — dashboard
+       dono se parh leta hai (jaise portal.html karta hai). */
+
+    async function loadRTDBSDKlive() {
+      if (window.firebase && typeof firebase.database === 'function') return;
+      await new Promise((resolve, reject) => {
+        const sc = document.createElement('script');
+        let settled = false;
+        const done = (fn, v) => { if (settled) return; settled = true; fn(v); };
+        sc.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js';
+        sc.onload = () => done(resolve);
+        sc.onerror = () => done(reject, new Error('Realtime Database SDK load failed'));
+        setTimeout(() => done(reject, new Error('Realtime Database SDK timeout')), 5000);
+        document.head.appendChild(sc);
+      });
+    }
+    function rtdbCandidates() {
+      const pid = (FIREBASE_CFG && FIREBASE_CFG.projectId) || 'maundrylaundrypos';
+      let saved = null;
+      try { saved = localStorage.getItem('mrlCloudDatabaseURL'); } catch (e) {}
+      return [...new Set([
+        saved,
+        FIREBASE_CFG && FIREBASE_CFG.databaseURL,
+        'https://' + pid + '-default-rtdb.asia-southeast1.firebasedatabase.app',
+        'https://' + pid + '-default-rtdb.firebaseio.com',
+        'https://' + pid + '.firebaseio.com'
+      ].filter(Boolean))];
+    }
+    async function readRTDBLive() {
+      await loadRTDBSDKlive();
+      for (const url of rtdbCandidates()) {
+        try {
+          const name = 'rtdb-' + url.replace(/[^a-z0-9]/gi, '').slice(-16);
+          let app = (firebase.apps || []).find(a => a && a.name === name);
+          if (!app) app = firebase.initializeApp(Object.assign({}, FIREBASE_CFG, { databaseURL: url }), name);
+          const snap = await firebase.database(app).ref('shops/' + SHOP_ID).get();
+          if (snap && snap.exists()) {
+            const v = snap.val() || {};
+            if (v.data) { window.__mrlRdbUrl = url; return JSON.parse(v.data); }
+          }
+        } catch (e) { /* agla URL */ }
+      }
+      return null;
+    }
+
     async function initFirebase() {
       if (_db) return _db;
       if (!FIREBASE_CFG || !FIREBASE_CFG.apiKey) {
@@ -431,12 +480,33 @@
     }
 
     async function fetchCloudData() {
-      const db = await initFirebase();
-      const shopId = SHOP_ID;
-      const docRef = db.collection('shops').doc(shopId);
-      const snap = await docRef.get();
-      if (!snap.exists) throw new Error('No cloud data found for this shop.');
-      const meta = snap.data();
+      /* 1) Firestore (agar database + rules theek hon) */
+      try {
+        const db = await initFirebase();
+        const shopId = SHOP_ID;
+        const docRef = db.collection('shops').doc(shopId);
+        const snap = await Promise.race([
+          docRef.get(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('Firestore timeout')), 7000))
+        ]);
+        if (snap.exists) return await parseFirestoreMeta(docRef, snap.data());
+      } catch (e) {
+        console.warn('[Live] Firestore read failed — trying Realtime Database:', (e && e.message) || e);
+      }
+      /* 2) Realtime Database */
+      try {
+        const data = await readRTDBLive();
+        if (data) {
+          console.log('[Live] data loaded from Realtime Database:', window.__mrlRdbUrl || '');
+          return data;
+        }
+      } catch (e) {
+        console.warn('[Live] Realtime Database read failed:', (e && e.message) || e);
+      }
+      throw new Error('Cloud data nahi mila. 1) POS → Settings → Cloud Sync ek dafa ON karein (pehli sync baqi hai), 2) agar phir bhi na aaye to cloud-check.html kholein aur report bhejein.');
+    }
+
+    async function parseFirestoreMeta(docRef, meta) {
 
       // Chunked format (chunked-v1) — fetch needed tables only from 'tables' subcollection
       if (meta._format === 'chunked-v1' && meta.tables) {
@@ -699,6 +769,6 @@
       }
     });
   </script>
-  <script src="assets/js/guard.js?v=20261119.20"></script>
+  <script src="assets/js/guard.js?v=20261119.21"></script>
 </body>
 </html>
