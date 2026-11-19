@@ -194,6 +194,10 @@ const CLOUD = {
   /* ---- Realtime Database support (agar client ne wohi banaya ho) ---- */
   async loadRTDBSDK() {
     if (window.firebase && typeof window.firebase.database === 'function') return;
+    if (!window.firebase || typeof window.firebase.firestore !== 'function') {
+      try { await this.loadSDK(); } catch (e) { /* neeche phir check */ }
+    }
+    if (window.firebase && typeof window.firebase.database === 'function') return;
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
       let settled = false;
