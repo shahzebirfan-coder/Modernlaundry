@@ -648,3 +648,160 @@ koi window khulti hi nahi thi, aur connection fail hone par kuch nazar nahi aata
 ### Test (verified)
 `tcloudbtn3.js` — Firebase mock ke sath poora flow green: Settings ka button → manager khulta hai →
 "ON karein" → 29 tables push + main doc + real-time listener + chunked format + user ko message.
+
+
+---
+
+## 15B. "Failed to get document because the client is offline" — matlab aur hal
+
+Ye error Firebase ki taraf se aata hai jab **browser Firestore tak pohnch hi nahi pa raha**.
+Software ka bug nahi — connection/rules ka masla hai. Ab software khud wajah bata deta hai.
+
+### Tarteeb se check karein (99% cases inhi mein se ek hote hain)
+
+| # | Check | Kaise |
+|---|---|---|
+| 1 | **Internet chal raha hai?** | Koi doosri website kholain. Offline ho to Wi-Fi/mobile data on karein |
+| 2 | **Firestore Database bana hua hai?** | Firebase Console → **Build → Firestore Database** → agar "Create database" likha hai to **pehle usay banayein** (location: `asia-south1` ya koi bhi) |
+| 3 | **Rules publish hain?** | Firestore → **Rules** tab → `FIREBASE-RULES.txt` ka poora content paste → **Publish** |
+| 4 | **Firewall / antivirus / VPN** | Office ya school network `firestore.googleapis.com` + `*.googleapis.com` block kar deta hai. Mobile hotspot se test karein — agar wahan chal jaye to masla network ka hai |
+| 5 | **Ad-blocker / Brave shields** | Band kar ke dobara "Connection test karein" |
+| 6 | **Project ID sahi hai?** | Config mein `projectId: maundrylaundrypos` hona chahiye |
+
+### Software mein kya behtar hua
+- `init()` ab **8 second** tak connection ka intezaar karta hai; na bane to saaf error deta hai (pehle "client is offline" raw message aata tha).
+- Error ki wajah ke mutabiq **seedhi hidayat** milti hai: *offline → internet/firewall*, *permission → rules publish*, *api-key → config dobara copy*.
+- **Connection test** button ab poori tafseel dikhata hai aur "Merge Now / Force Pull" ka rasta bhi batata hai.
+- Connect fail ho to sync **OFF hi rehta hai** — adhoora connection banta hi nahi (data safe).
+- Sync ON hone par hi "Never synced" jaisi purani state badalti hai; jaldi mein ghalti se "connected" ka dhoka nahi milta.
+
+### Test (verified)
+`tcloudoffline.js` — 8 checks green: offline Firestore par init 8s mein saaf error deta hai, quick-connect `false` return karta hai
+aur sync OFF rehta hai, manager dobara khulta hai, aur test button wajah + hal likhta hai.
+
+
+---
+
+## 15C. "Line 1: Parse error" — Firestore rules Realtime Database mein paste ho gaye
+
+### Ghalti
+Firebase Console mein **do alag databases** hote hain, rules dono ke **alag format** mein hote hain:
+
+| Console menu | Rules format |
+|---|---|
+| **Firestore Database** | `rules_version = '2'; service cloud.firestore { match /databases/{database}/documents { ... } }` → `FIREBASE-RULES.txt` |
+| **Realtime Database** | JSON → `{ "rules": { "shops": { "$shopId": { ".read": true, ".write": true } } } }` → `FIREBASE-RULES-REALTIME.txt` |
+
+Screenshot mein **Realtime Database → Rules** khula tha aur wahan Firestore wale rules paste hue the —
+is liye `Line 1: Parse error` aaya.
+
+### Ab software dono support karta hai
+1. **Firestore** (default, chhota-chhota chunked storage) — agar bana ho.
+2. Agar Firestore nahi bana / jawab nahi de raha → software **khud Realtime Database** par switch kar jata hai
+   (SDK lazily load hota hai, `shops/<shopId>` mein data + version + deviceId save hota hai, real-time listen bhi chalta hai).
+   Manager mein backend bhi likha aata hai: *"🗄️ Backend: Realtime Database"*.
+
+### Client ke liye do raste
+- **A (behtar):** **Build → Firestore Database → Create database**, phir us ke Rules tab mein `FIREBASE-RULES.txt` paste → Publish.
+- **B:** Realtime Database hi use karna ho to us ke Rules tab mein `FIREBASE-RULES-REALTIME.txt` (JSON) paste → Publish. Software khud usi par chal jayega.
+
+### Saath hi 2 aur bug fix
+- Quick-connect mein `push()` ab **sirf connect ke baad** chalta hai (pehle sync OFF hote hue push skip ho jata tha → cloud khali reh jata tha). Agar push fail ho to sync **OFF** hi rehta hai (jhoota "connected" nahi).
+- Realtime Database SDK load par **5 second timeout** — UI atakti nahi.
+
+### Test (verified)
+- `trtdb.js` — 11 checks: Firestore offline hone par RTDB fallback, data `shops/modern-laundry-main` par save,
+  doosre device ka record merge, manager mein backend ka naam.
+- `tcloudoffline.js` — 8 checks: dono backend fail hon to saaf message + sync OFF + retry button.
+- `tcloud.js`, `tcloudbtn3.js` bhi green (Firestore path intact).
+
+
+---
+
+## 15D. Option B — sirf Realtime Database par chalna (client ka faisla)
+
+Client ne Realtime Database rakha hai. Ab software ka poora sync dono backends par chalta hai:
+
+| Cheez | Firestore | Realtime Database |
+|---|---|---|
+| POS push/pull/merge | ✅ chunked docs | ✅ `shops/<shopId>` (JSON + version + deviceId) |
+| Real-time listener | ✅ onSnapshot | ✅ `ref().on('value')` |
+| Portal (customer) | ✅ chunked docs | ✅ `shops/<shopId>` se parhta hai |
+| Rules file | `FIREBASE-RULES.txt` | `FIREBASE-RULES-REALTIME.txt` (JSON) |
+| Setup guide | `CLOUD-SETUP-STEPS.md` | `REALTIME-DB-SETUP.md` |
+
+### Kaam ka tareeqa
+1. `CLOUD.init()` pehle Firestore probe karta hai. Realtime Database pehle chala ho (ya `mrlCloudBackend=rtdb`
+   saved ho) to seedha RTDB try hota hai — warna Firestore probe (8s) ke baad RTDB fallback.
+2. Backend localStorage mein yaad rehta hai → agli dafa seedha usi par connect hota hai (tez).
+3. Manager/status mein backend likha aata hai: **🗄️ Backend: Realtime Database**.
+4. Portal: Firestore par 6 second timeout; na chale to RTDB se parh leta hai (customer ko farq nahi parta).
+
+### Is round ke fixes
+- `portal.html`: `DB.save` guard (agar DB script masla kare to poora portal block na ho) + `window.PORTAL_CLOUD` debug hook.
+- Quick-connect ka `push()` sirf **connect ke baad**, push fail → sync **OFF** (jhoota connected nahi).
+- RTDB SDK load par 5s timeout.
+
+### Test (verified)
+`trtdb.js` 11 ✓ · `tportalrtdb.js` 6 ✓ · `tcloudoffline.js` 8 ✓ · `tcloud.js` 20 ✓ · `tcloudbtn3.js` 12 ✓ · baqi
+(tpay/tpospay/tdisc/tdisc2/tdelcharge/tdcprint/tpress/tpressportal) bhi green.
+
+
+---
+
+## 15E. "Failed to get document because the client is offline" — ab nahi aayega (RTDB-first)
+
+### Wajah
+Project mein **Realtime Database** hai, Firestore nahi. Software pehle Firestore probe karta tha,
+8 second intezaar ke baad fail hota tha, aur wohi raw message screen par aa jata tha — halanke sync
+RTDB par chal sakta tha.
+
+### Ab
+- Config mein `databaseURL` shamil hai → `https://maundrylaundrypos-default-rtdb.firebaseio.com`
+- `CLOUD.init()` **pehle Realtime Database** try karta hai (`.info/connected`), **1 second** ke andar connect.
+- Firestore instance ab **lazily** banta hai (jab zaroorat ho) — bekaar ke "offline" attempt nahi.
+- Firestore probe sirf tab jab RTDB na mile. RTDB probe ek page-load mein dobara nahi dohraya jata (5s bachta hai).
+- Kamyabi par backend yaad rehta hai (`mrlCloudBackend=rtdb`) → agli dafa seedha RTDB.
+- Fail hone par wajah backend ke hisab se: *permission* → rules JSON publish, *not found* → Realtime Database create karein, warna internet/firewall.
+
+### Test (verified)
+`tcloudprobe.js` 8 ✓ — `databaseURL` pick hota hai, RTDB **pehle** probe hoti hai (Firestore se pehle),
+3 second se kam mein connect, payload `shops/modern-laundry-main` par, aur user ko raw "client is offline" nahi milta.
+`tcloud.js` 20 ✓ · `tcloudbtn3.js` 12 ✓ · `trtdb.js` 11 ✓ · `tportalrtdb.js` 6 ✓ · `tcloudoffline.js` 8 ✓.
+
+
+---
+
+## 15F. Project audit (service-account key se, read-only) — asli wajah confirm
+
+`maundrylaundrypos` project:
+
+| Cheez | Nateeja |
+|---|---|
+| **Firestore database** | ❌ **bana hi nahi** — Cloud Firestore API disabled (`firestore.googleapis.com` → 403) |
+| **Realtime Database** | ✅ ACTIVE — `https://maundrylaundrypos-default-rtdb.asia-southeast1.firebasedatabase.app` (asia-southeast1) |
+| **RTDB Rules** | ✅ pehle se sahi: `shops/$shopId → .read: true, .write: true` |
+| **RTDB data** | khali (sync pehli dafa chalna baqi hai) |
+
+**Natija:** jo error aata tha (`Failed to get document because the client is offline`) woh **Firestore** ka tha jo
+project mein mojood hi nahi. Ab software RTDB-first hai, aur galat URL bhi bardasht karta hai.
+
+### Is round ke fixes
+- `databaseURL` config mein sahi regional URL: `...asia-southeast1.firebasedatabase.app`
+  (pehle `.firebaseio.com` tha — asia-southeast1 instance ke liye ghalat).
+- `getDatabaseURLCandidates()` — saved URL → config URL → regional → US → legacy; jo chale wohi use hota hai, aur
+  localStorage (`mrlCloudDatabaseURL`) mein yaad rehta hai. Har URL ke liye alag **named Firebase app** (SDK pehli
+  databaseURL par atakta nahi).
+- `portal.html` bhi wohi URL list try karta hai (customer ko farq nahi parta).
+- `_rtdbUrl` state + console log: `[CloudSync] Realtime Database connected: <url>`.
+- `_rtdbSkip` — ek page-load mein RTDB timeout dobara try nahi hota (5s bachta hai).
+
+### Test (verified)
+`tcloudurl.js` 9 ✓ (galat URL config, sahi regional instance par connect, URL yaad) ·
+`tcloudprobe.js` 8 ✓ · `trtdb.js` 11 ✓ · `tportalrtdb.js` 6 ✓ · `tcloud.js` 20 ✓ · `tcloudbtn3.js` 12 ✓ ·
+`tcloudoffline.js` 8 ✓ · baqi 8 suites green.
+
+### 🔐 Security note (service account key)
+Jo file bheji gayi (`...-adminsdk-...json`) woh **admin key** hai — ise kisi ko na dein, na website/email/WhatsApp par
+rakhein. Agar kahin aur share hui ho to Firebase Console → Project settings → Service accounts → **Delete/rotate key**.
+Software ko is ki zaroorat **nahi** — browser sirf public web config use karta hai.

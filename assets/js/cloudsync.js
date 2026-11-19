@@ -11,14 +11,19 @@ const MAX_DOC_SIZE = 800000; // 800KB — safe margin under Firestore 1MB limit
 
 function parseFirebaseConfig(text) {
   if (!text) throw new Error('Empty config');
-  let s = text.trim();
-  s = s.replace(/^(const|let|var)\s+\w+\s*=\s*/, '');
-  s = s.replace(/;\s*$/, '');
-  s = s.replace(/^export\s+default\s*/, '');
+  let s = String(text);
+  /* paste ki ghaltiyan khud theek karte hain: BOM, smart quotes, non-breaking space,
+     aage/peeche ka label text, trailing comma */
+  s = s.replace(/\uFEFF/g, '').replace(/[\u2018\u2019\u201A\u201B]/g, "'").replace(/[\u201C\u201D\u201E]/g, '"')
+       .replace(/\u00A0/g, ' ');
   s = s.trim();
+  const first = s.indexOf('{'), last = s.lastIndexOf('}');
+  if (first > -1 && last > first) s = s.slice(first, last + 1);
+  s = s.replace(/^(const|let|var)\s+\w+\s*=\s*/, '').replace(/;\s*$/, '').replace(/^export\s+default\s*/, '').trim();
+  s = s.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
   try { return JSON.parse(s); } catch(e) {}
   try { return (new Function('return (' + s + ')'))(); } catch(e) {
-    throw new Error('Could not parse config. Make sure you copied the firebaseConfig block correctly (from { to } including braces).');
+    throw new Error('Config parse nahi hui. Poora block { se } tak copy karein (ya "♻️ Default config wapas laayein" dabayein).');
   }
 }
 
@@ -85,12 +90,22 @@ const CLOUD = {
     return '';
   },
   setShopId(id) { localStorage.setItem(this.SHOP_KEY, id); },
+  BACKEND_KEY: 'mrlCloudBackend',
+  /* Realtime Database ka URL: config mein ho to wohi, warna project ka default */
+  getDatabaseURL() {
+    const cfg = this.getConfig() || {};
+    if (cfg.databaseURL) return cfg.databaseURL;
+    if (window.FIREBASE_DEFAULT_CFG && window.FIREBASE_DEFAULT_CFG.databaseURL) return window.FIREBASE_DEFAULT_CFG.databaseURL;
+    if (cfg.projectId) return 'https://' + cfg.projectId + '-default-rtdb.firebaseio.com';
+    return null;
+  },
+  _preferRTDB() { return localStorage.getItem('mrlCloudBackend') === 'rtdb'; },
   isEnabled() { return localStorage.getItem(this.ENABLED_KEY) === 'true'; },
   setEnabled(v) { localStorage.setItem(this.ENABLED_KEY, v?'true':'false'); },
   isReady() { return !!(this.getConfig() && this.getShopId()); },
 
   async loadSDK() {
-    if (window.firebase?.firestore) return;
+    if (window.firebase && typeof window.firebase.firestore === 'function') return;
     const scripts = [
       'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js',
       'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js'
@@ -109,10 +124,173 @@ const CLOUD = {
     const cfg = this.getConfig();
     if (!cfg) throw new Error('Firebase not configured');
     await this.loadSDK();
+    if (!window.firebase || typeof firebase.firestore !== 'function') {
+      throw new Error('Firebase SDK load nahi hua — internet / firewall check karein (gstatic.com block ho sakta hai)');
+    }
     if (!firebase.apps.length) this._app = firebase.initializeApp(cfg);
     else this._app = firebase.app();
-    this._db = firebase.firestore();
-    return this._db;
+
+    /* Firestore instance sirf tab banate hain jab zaroorat ho — warna
+       Realtime Database wale project mein "client is offline" ke gher-zaroori
+       attempts aur 8 second ka intezaar hota hai. */
+    const fsdb = () => {
+      if (!this._db) this._db = firebase.firestore();
+      return this._db;
+    };
+
+    const probe = () => new Promise((resolve) => {
+      let done = false;
+      const finish = (okdb) => { if (done) return; done = true; try { unsub && unsub(); } catch(e){} resolve(okdb); };
+      let unsub = null;
+      try {
+        unsub = fsdb().collection('shops').doc(this.getShopId() || '_probe')
+          .onSnapshot(() => finish(true), () => finish(false));
+      } catch (e) { return finish(false); }
+      setTimeout(() => finish(false), 8000);   // 8s tak jawab nahi = offline
+    });
+
+    /* databaseURL = project mein Realtime Database mojood hai (aur client ne wohi
+       rakha hai). Aise mein pehle RTDB try karte hain — 6 second ke andar jawab
+       aa jata hai — taake Firestore ke 8-second wait ke baad aane wala
+       "client is offline" error na dikhe. */
+    if ((this.getDatabaseURL() || this._preferRTDB()) && !this._rtdbSkip) {
+      const first = await this._probeRealtimeDB(cfg);
+      if (first) { this._mode = 'rtdb'; localStorage.setItem(this.BACKEND_KEY, 'rtdb'); return first; }
+      this._rtdbSkip = true;   // is page load mein dobara 5 second zaya na karein
+    }
+    try { fsdb().enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch (e) {}
+    this._triedFirestore = true;
+    if (await probe()) { localStorage.setItem(this.BACKEND_KEY, 'firestore'); return this._db; }
+
+    /* Firestore jawab nahi de raha → kya sirf Realtime Database bana hua hai?
+       (Logon ne Firestore ki jagah Realtime Database create kar diya hota hai —
+       us surat mein bhi sync chalna chahiye.) */
+    const rtdb = this._rtdbSkip ? null : await this._probeRealtimeDB(cfg);
+    if (rtdb) { this._mode = 'rtdb'; localStorage.setItem(this.BACKEND_KEY, 'rtdb'); return rtdb; }
+    this._rtdbSkip = true;
+
+    this._db = null;
+    const onLine = (typeof navigator !== 'undefined') ? navigator.onLine !== false : true;
+    const rtErr = this._lastRTDBError || '';
+    if (!onLine) throw new Error('Internet offline hai — pehle network connect karein, phir dobara koshish karein.');
+    if (/permission_denied|Permission denied/i.test(rtErr)) {
+      throw new Error('Realtime Database ne ijazat nahi di. Firebase Console → Realtime Database → Rules mein FIREBASE-RULES-REALTIME.txt (JSON) paste kar ke Publish karein.');
+    }
+    if (/not found|404|invalid|does not exist/i.test(rtErr)) {
+      throw new Error('Realtime Database mojood nahi. Firebase Console → Realtime Database → "Create Database" dabayein, ya config mein sahi databaseURL likhein.');
+    }
+    /* auto-detect: Firestore zyada behtar (chunked, rules sambhalne layak) — lekin
+       sirf tab jab hum usay test kar chuke hon. */
+    if (!this._triedFirestore) {
+      this._triedFirestore = true;
+      try { fsdb().enablePersistence({ synchronizeTabs: true }).catch(() => {}); } catch (e) {}
+      if (await probe()) { localStorage.setItem(this.BACKEND_KEY, 'firestore'); return this._db; }
+    }
+    throw new Error('Realtime Database se connection nahi bana'
+      + (rtErr ? ' (' + rtErr + ')' : '')
+      + '. Check karein: 1) internet/firewall, 2) Firebase Console → Realtime Database bana hua hai, 3) cloud fires abhi kuch second pehle OFF tha to dobara try karein.');
+  },
+
+  /* ---- Realtime Database support (agar client ne wohi banaya ho) ---- */
+  async loadRTDBSDK() {
+    if (window.firebase && typeof window.firebase.database === 'function') return;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      let settled = false;
+      const done = (fn, v) => { if (settled) return; settled = true; fn(v); };
+      s.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js';
+      s.onload = () => done(resolve);
+      s.onerror = () => done(reject, new Error('Realtime Database SDK load nahi hua'));
+      // 5s se zyada intezaar nahi — warna UI atak jati hai
+      setTimeout(() => done(reject, new Error('Realtime Database SDK timeout')), 5000);
+      document.head.appendChild(s);
+    });
+  },
+  /* Realtime Database ke mumkin URLs — jo bhi chal jaye wohi use hota hai.
+     (Project asia-southeast1 mein bana ho to URL .firebasedatabase.app hota hai,
+     US mein bana ho to .firebaseio.com — galat URL = "client is offline".) */
+  getDatabaseURLCandidates() {
+    const cfg = this.getConfig() || {};
+    const saved = localStorage.getItem('mrlCloudDatabaseURL');
+    const pid = cfg.projectId || (window.FIREBASE_DEFAULT_CFG && window.FIREBASE_DEFAULT_CFG.projectId) || 'maundrylaundrypos';
+    const list = [
+      saved,
+      cfg.databaseURL,
+      window.FIREBASE_DEFAULT_CFG && window.FIREBASE_DEFAULT_CFG.databaseURL,
+      'https://' + pid + '-default-rtdb.asia-southeast1.firebasedatabase.app',
+      'https://' + pid + '-default-rtdb.firebaseio.com',
+      'https://' + pid + '.firebaseio.com'
+    ];
+    return [...new Set(list.filter(Boolean).map(u => u.replace(/\/+$/, '')))];
+  },
+
+  async _probeRealtimeDB(cfg) {
+    try {
+      await this.loadRTDBSDK();
+      if (!window.firebase || typeof firebase.database !== 'function') return null;
+      for (const url of this.getDatabaseURLCandidates()) {
+        const got = await this._probeOneRTDB(cfg, url);
+        if (got) return got;
+      }
+      return null;
+    } catch (e) {
+      this._lastRTDBError = (e && e.message) || String(e);
+      console.warn('[CloudSync] RTDB probe failed', this._lastRTDBError);
+      return null;
+    }
+  },
+
+  async _probeOneRTDB(cfg, url) {
+    try {
+      /* har URL ke liye alag (named) Firebase app — warna SDK pehli databaseURL
+         par hi atak jata hai */
+      const appName = 'rtdb-' + url.replace(/[^a-z0-9]/gi, '').slice(-16);
+      let app;
+      const existing = (firebase.apps || []).find(a => a && a.name === appName);
+      if (existing) app = existing; else app = firebase.initializeApp(Object.assign({}, cfg, { databaseURL: url }), appName);
+      const rdb = firebase.database(app);
+      const ok = await new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => { if (done) return; done = true; resolve(v); };
+        const ref = rdb.ref('.info/connected');
+        const cb = (snap) => { if (snap.val() === true) finish(true); };
+        try { ref.on('value', cb); } catch (e) { return finish(false); }
+        setTimeout(() => { try { ref.off('value', cb); } catch (e) {} finish(false); }, 6000);
+      });
+      if (!ok) return null;
+      this._rdb = rdb;
+      this._rdbUrl = url;
+      localStorage.setItem('mrlCloudDatabaseURL', url);
+      console.log('[CloudSync] Realtime Database connected:', url);
+      return { _rtdb: rdb };
+    } catch (e) {
+      this._lastRTDBError = (e && e.message) || String(e);
+      console.warn('[CloudSync] RTDB probe failed for', url, this._lastRTDBError);
+      return null;
+    }
+  },
+
+  /* RTDB path: shops/<shopId> mein poora data (ek hi JSON) */
+  async _rtdbPush(data) {
+    const rdb = this._rdb;
+    const shop = this.getShopId();
+    const payload = {
+      data: JSON.stringify(data),
+      version: Date.now(),
+      deviceId: getDeviceId(),
+      deviceLabel: getDeviceLabel(),
+      updatedBy: DB.currentUser()?.username || 'unknown',
+      updatedAt: new Date().toISOString()
+    };
+    await rdb.ref('shops/' + shop).set(payload);
+    return payload.version;
+  },
+  async _rtdbPull() {
+    const rdb = this._rdb;
+    const shop = this.getShopId();
+    const snap = await rdb.ref('shops/' + shop).get();
+    if (!snap.exists()) return null;
+    try { return JSON.parse(snap.val().data || 'null'); } catch (e) { return null; }
   },
 
   /* ============== MERGE LOGIC ============== */
@@ -162,6 +340,13 @@ const CLOUD = {
     this._syncing = true;
     try {
       const db = await this.init();
+      if (this._mode === 'rtdb') {
+        const v = await this._rtdbPush(DB._data);
+        this._lastAppliedVersion = v;
+        localStorage.setItem(this.LAST_SYNC_KEY, new Date().toISOString());
+        console.log('[CloudSync] Pushed to Realtime Database');
+        return;
+      }
       const shopId = this.getShopId();
       const data = DB._data;
       const version = Date.now();
@@ -244,6 +429,16 @@ const CLOUD = {
   /* ============== PULL & MERGE (CHUNKED) ============== */
   async pullAndMerge() {
     const db = await this.init();
+    if (this._mode === 'rtdb') {
+      const remote = await this._rtdbPull();
+      if (!remote) return false;
+      const merged = this.mergeData(DB._data, remote);
+      DB._data = merged;
+      this._suppressPush = true;
+      try { DB.save(); } finally { this._suppressPush = false; }
+      localStorage.setItem(this.LAST_SYNC_KEY, new Date().toISOString());
+      return true;
+    }
     const shopId = this.getShopId();
     const mainDoc = await db.collection('shops').doc(shopId).get();
     if (!mainDoc.exists) return false;
@@ -298,6 +493,29 @@ const CLOUD = {
   async listen() {
     if (this._unsub) this._unsub();
     const db = await this.init();
+    if (this._mode === 'rtdb') {
+      const myDeviceId = getDeviceId();
+      const ref = this._rdb.ref('shops/' + this.getShopId());
+      const cb = async (snap) => {
+        if (!snap.exists()) return;
+        const v = snap.val();
+        if (v.deviceId === myDeviceId) return;
+        if (v.version && v.version <= this._lastAppliedVersion) return;
+        try {
+          await this.pullAndMerge();
+          clearTimeout(this._toastDebounceTimer);
+          this._toastDebounceTimer = setTimeout(() => {
+            if (typeof toast === 'function') toast(`☁️ Synced from ${v.deviceLabel || 'another device'} (${v.updatedBy || 'user'})`, 'success');
+          }, 300);
+          if (typeof app !== 'undefined' && app.current && document.visibilityState === 'visible') {
+            setTimeout(() => app.go(app.current), 400);
+          }
+        } catch (e) { console.warn('RTDB merge failed', e); }
+      };
+      ref.on('value', cb);
+      this._unsub = () => { try { ref.off('value', cb); } catch (e) {} };
+      return;
+    }
     const shopId = this.getShopId();
     const myDeviceId = getDeviceId();
 
@@ -428,10 +646,16 @@ async function enableCloudSyncQuick(shopId) {
     CLOUD.setConfig(cfg);
     CLOUD.setShopId((shopId || CLOUD.getDefaultShopId() || 'modern-laundry-main').trim());
     toast2('☁️ Cloud se connect ho rahe hain…');
-    await CLOUD.init();
-    await CLOUD.pullAndMerge();
-    await CLOUD.push();
-    CLOUD.setEnabled(true);
+    await CLOUD.init();              // connect fail ho to yahin ruk jate hain
+    CLOUD.setEnabled(true);          // ON sirf connect ke BAAD — warna push() skip ho jata hai
+    try {
+      await CLOUD.push();            // is device ka data cloud par
+    } catch (pushErr) {
+      CLOUD.setEnabled(false);
+      CLOUD._db = null;
+      throw new Error('Data cloud par nahi gaya: ' + pushErr.message);
+    }
+    await CLOUD.pullAndMerge();      // phir cloud se merge
     await CLOUD.listen();
     CLOUD._initialMergeDone = true;
     if (typeof logAction === 'function') logAction('cloud.enable', CLOUD.getShopId());
@@ -559,6 +783,10 @@ function openCloudSyncManager(opts) {
     <div class="field">
       <label>Firebase Config JSON ${CLOUD.hasDefaults() ? '<small style="color:var(--text-soft);font-weight:400;">(pehle se bhara hua — chhedne ki zaroorat nahi)</small>' : ''}</label>
       <textarea id="fbCfg" rows="6" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:11px;">${cfg ? escapeHtml(JSON.stringify(cfg, null, 2)) : ''}</textarea>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <button class="btn btn-outline btn-sm" id="restoreCfgBtn" type="button">♻️ Default config wapas laayein</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-soft);margin-top:4px;">Sirf public web config (apiKey / projectId / appId). Admin / service-account key yahan NA daalein.</div>
     </div>
 
     <div class="form-row">
@@ -576,6 +804,7 @@ function openCloudSyncManager(opts) {
     </div>
 
     <div style="background:var(--surface-alt);padding:10px;border-radius:8px;font-size:12px;margin-bottom:14px;">
+      ${CLOUD._mode === 'rtdb' ? '🗄️ Backend: <b>Realtime Database</b><br><small style="opacity:.75;">' + escapeHtml(CLOUD._rdbUrl || CLOUD.getDatabaseURL() || '') + '</small><br>' : (cfg ? '🗄️ Backend: <b>Firestore</b><br>' : '')}
       ${lastSync ? `🔄 Last sync: ${new Date(lastSync).toLocaleString()}` : '⚠️ Never synced'}
       <br>📱 This device: <b>${escapeHtml(deviceLabel)}</b> <code style="font-size:10px;">${deviceId}</code>
     </div>
@@ -585,7 +814,7 @@ function openCloudSyncManager(opts) {
         <button class="btn btn-success btn-block btn-lg" id="enableBtn" style="font-size:16px;padding:14px;">☁️ Cloud Sync ON karein (1 click)</button>
         <small style="color:var(--text-soft);font-size:11px;text-align:center;">Yehi button har naye device (PC / mobile) par dabana hai — data khud aa jayega.</small>
       ` : ''}
-      ${(enabled || opts.advanced) ? `
+      ${(enabled || (opts.advanced && enabled)) ? `
         <button class="btn btn-success" id="mergeNowBtn">🔄 Merge Now (Pull + Push)</button>
         <button class="btn btn-primary" id="pushNowBtn">⬆️ Force Push This Device → Cloud</button>
         <button class="btn btn-warning" id="pullNowBtn">⬇️ Force Pull Cloud → This Device (OVERWRITE)</button>
@@ -617,10 +846,26 @@ function openCloudSyncManager(opts) {
 
     $('#firebaseGuideBtn', m)?.addEventListener('click', () => { closeModal(); openFirebaseSetupGuide(); });
 
+    /* "Default config wapas laayein" — agar config ghalti se badal gayi ho */
+    $('#restoreCfgBtn', m)?.addEventListener('click', () => {
+      const d = CLOUD.getDefaultConfig();
+      if (!d) { log('Bundled config mojood nahi', 'error'); return; }
+      const ta = $('#fbCfg', m);
+      if (ta) ta.value = JSON.stringify(d, null, 2);
+      const si = $('#shopId', m);
+      if (si && CLOUD.getDefaultShopId()) si.value = CLOUD.getDefaultShopId();
+      log('♻️ Default config wapas daal di — ab "Cloud Sync ON karein" dabayein', 'success');
+    });
+
     $('#enableBtn', m)?.addEventListener('click', async () => {
       const cfgText = $('#fbCfg', m).value.trim();
       const shop = ($('#shopId', m).value || '').trim() || CLOUD.getDefaultShopId();
       if (!cfgText || !shop) { log('Config ya Shop ID khali hai', 'error'); return; }
+      /* config ghalti se badal gaya ho to yahin pakar lete hain */
+      if (!/^\s*\{/.test(cfgText) || /PRIVATE KEY|service_account/.test(cfgText)) {
+        log('❌ Yeh Firebase ki sahi web config nahi hai. "♻️ Default config wapas laayein" dabayein (ya Console → Project settings → Web app ka config paste karein).<br><b>Admin/private key yahan NA daalein.</b>', 'error');
+        return;
+      }
       try {
         const parsed = parseFirebaseConfig(cfgText);
         if (!parsed.apiKey || !parsed.projectId) throw new Error('Invalid config — apiKey ya projectId nahi mila');
@@ -639,30 +884,71 @@ function openCloudSyncManager(opts) {
         log('✅ Connected! 3 second mein page reload hoga…', 'success');
         if (typeof toast === 'function') toast('✅ Cloud Sync ON — data cloud par mehfooz', 'success');
         setTimeout(() => location.reload(), 1800);
-      } catch(e) { CLOUD.setEnabled(false); log('❌ ' + e.message, 'error'); }
+      } catch(e) {
+        CLOUD.setEnabled(false);
+        const raw = String(e && e.message || e);
+        const hint = /permission|insufficient|PERMISSION_DENIED/i.test(raw)
+          ? 'Rules publish karein (Firebase → Firestore → Rules → FIREBASE-RULES.txt)'
+          : /offline|unavailable|network/i.test(raw)
+            ? 'Connection nahi bana — internet / firewall check karein, aur Firestore Database bana hua ho'
+            : 'Dobara try karein';
+        log('❌ ' + escapeHtml(raw) + '<br><b>👉 ' + hint + '</b>', 'error');
+      }
     });
 
     /* auto-enable mode (Settings → "Cloud Sync ON karein") */
     if (opts.autoEnable && $('#enableBtn', m)) setTimeout(() => $('#enableBtn', m).click(), 150);
 
     $('#testConnBtn', m)?.addEventListener('click', async () => {
-      log('🔌 Firebase se test connection…');
+      const show = (html, type) => {
+        $('#syncLog', m).innerHTML = `<div style="padding:10px;border-radius:6px;line-height:1.6;background:var(--surface-alt);color:${type === 'error' ? 'var(--danger)' : type === 'success' ? 'var(--success)' : 'var(--text-soft)'};">${html}</div>`;
+      };
+      const buildTag = (typeof MRL_BUILD_TAG !== 'undefined') ? MRL_BUILD_TAG : (window.MRL_BUILD_TAG || '');
+    if (buildTag) log('🧾 Build: ' + escapeHtml(buildTag));
+    log('🔌 Firebase se test connection…');
       try {
-        const db = await CLOUD.init();
-        const shop = CLOUD.getShopId();
-        if (!shop) throw new Error('Shop ID khali hai');
+        /* Config jo box mein likhi hai wohi test karein (saved config se pehle) */
+        const boxCfg = ($('#fbCfg', m)?.value || '').trim();
+        if (boxCfg) {
+          const parsed = parseFirebaseConfig(boxCfg);
+          if (parsed && parsed.apiKey) CLOUD.setConfig(parsed);
+        }
+        const shop = CLOUD.getShopId() || ($('#shopId', m)?.value || '').trim();
+        if (!shop) throw new Error('Shop ID khali hai — upar "Shop ID" mein modern-laundry-main likhein');
+        const db = await CLOUD.init();          // yahan offline/SDK errors pakre jate hain
+        if (CLOUD._mode === 'rtdb') {
+          const remote = await CLOUD._rtdbPull();
+          const where = `<br><small>Database: ${escapeHtml(CLOUD._rdbUrl || '')}</small>`;
+          show(remote
+            ? '✅ <b>Connection OK</b> (Realtime Database)' + where + '<br>Cloud par data mojood hai. Ab "Merge Now" ya "Force Pull" use kar sakte hain.'
+            : '✅ <b>Connection OK</b> (Realtime Database)' + where + '<br>Cloud khali hai. Ab <b>☁️ Cloud Sync ON karein</b> dabayein.', 'success');
+          return;
+        }
         const doc = await db.collection('shops').doc(shop).get();
         if (doc.exists) {
           const d2 = doc.data() || {};
-          log('✅ Connection OK — cloud par data mojood hai (' + Math.round((d2.totalSize || 0)/1024) + ' KB, ' + (d2.updatedBy || '?') + ')', 'success');
+          show('✅ <b>Connection OK</b><br>Cloud par data mojood hai — ' + Math.round((d2.totalSize || 0)/1024) + ' KB, aakhri update: ' + escapeHtml(d2.updatedBy || '?') + '<br>Ab "Merge Now" ya "Force Pull" use kar sakte hain.', 'success');
         } else {
-          log('✅ Connection OK — lekin cloud khali hai. "Cloud Sync ON karein" dabayein, data upload ho jayega.', 'success');
+          show('✅ <b>Connection OK</b> — cloud khali hai.<br>Ab <b>☁️ Cloud Sync ON karein</b> dabayein, is device ka data upload ho jayega.', 'success');
         }
       } catch (e) {
-        const msg = /permission|insufficient/i.test(e.message)
-          ? '❌ Permission denied — Firebase Console → Firestore → Rules mein FIREBASE-RULES.txt paste karke Publish karein'
-          : '❌ ' + e.message;
-        log(msg, 'error');
+        const raw = String(e && e.message || e);
+        let msg;
+        if (/permission|insufficient|PERMISSION_DENIED/i.test(raw)) {
+          msg = '❌ <b>Permission denied</b> — Firebase Console → Firestore Database → <b>Rules</b> mein <code>FIREBASE-RULES.txt</code> ka content paste kar ke <b>Publish</b> karein.';
+        } else if (/offline|unavailable|network|timeout|ERR_/i.test(raw)) {
+          msg = '❌ <b>Client offline</b> — browser Firestore tak nahi pohnch raha.<br>'
+              + '1) Internet chal raha hai? (kisi doosri website se check karein)<br>'
+              + '2) Office/school firewall ya antivirus <code>firestore.googleapis.com</code> block to nahi kar raha?<br>'
+              + '3) Firebase Console → <b>Firestore Database</b> bana hua hai? (agar "Create database" likha ho to pehle woh banayein)<br>'
+              + '4) Browser mein koi ad-blocker / VPN band kar ke dobara try karein.<br>'
+              + '<small>(' + escapeHtml(raw) + ')</small>';
+        } else if (/api-key|API key|invalid/i.test(raw)) {
+          msg = '❌ <b>Config ghalat lagti hai</b> — Firebase Console → Project settings → Web app se <code>firebaseConfig</code> dobara copy kar ke upar paste karein.<br><small>(' + escapeHtml(raw) + ')</small>';
+        } else {
+          msg = '❌ ' + escapeHtml(raw);
+        }
+        show(msg, 'error');
       }
     });
 
