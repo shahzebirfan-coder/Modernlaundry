@@ -805,3 +805,31 @@ project mein mojood hi nahi. Ab software RTDB-first hai, aur galat URL bhi barda
 Jo file bheji gayi (`...-adminsdk-...json`) woh **admin key** hai — ise kisi ko na dein, na website/email/WhatsApp par
 rakhein. Agar kahin aur share hui ho to Firebase Console → Project settings → Service accounts → **Delete/rotate key**.
 Software ko is ki zaroorat **nahi** — browser sirf public web config use karta hai.
+
+
+---
+
+## 15G. Live Dashboard (live.html) — "Missing or insufficient permissions"
+
+### Wajah (do masle mile)
+1. `live.html` mein **Firebase config aur Shop ID khali** the (`HARDCODED_* = ''`) — hosted site (vercel) par
+   browser ke localStorage se kuch nahi milta, is liye page ne project hi nahi khoja.
+2. Firestore ke rules `allow read, write: if false` hain → Firestore se parhna "Missing or insufficient permissions"
+   deta hai (aur agar POS ne RTDB par sync kiya ho to Firestore mein data hi nahi).
+
+### Fix
+- `live.html` mein wohi public config + `Shop ID = modern-laundry-main` hard-wire kar diya (jaise `portal.html` mein hai).
+  → hosted dashboard ab browser ke localStorage par depend nahi.
+- `fetchCloudData()` ab **do raste** aazmata hai: pehle Firestore (7s timeout), na chale to
+  **Realtime Database** (mumkin URLs: regional → US → legacy) se orders/expenses/settings parh leta hai.
+- Purana bug: `unlock()` `startDashboard()` ko `let _refreshTimer` se pehle call karta tha →
+  "Cannot access '_refreshTimer' before initialization". Ab `setTimeout(startDashboard, 0)`.
+- `_rdbUrl` TDZ bug bhi theek (state `window.__mrlRdbUrl` par).
+
+### Test (verified)
+`tlive.js` 7 ✓ — config hard-wired, Firestore permission-denied hone par RTDB se orders load, dashboard render
+(no "Could not load data"), PIN gate ke baad auto-start.
+
+### Client ke liye
+Live dashboard URL (`.../live.html`) par 30 second auto-refresh chalta rahega. Data wahan tab aayega jab
+POS ne ek dafa **Cloud Sync ON** kiya ho (cloud abhi khali hai).
