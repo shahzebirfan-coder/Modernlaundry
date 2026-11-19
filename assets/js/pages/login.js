@@ -5,10 +5,20 @@
      that image is used automatically.
    - Otherwise the built-in Mr Laundry hanger mark is drawn as inline SVG.
    Nothing here is hard-coded to a shop name: everything comes from Settings. */
+/* Full lockup mark (hanger + "Modern DRY CLEANERS") used in hero/header.
+   Deliberately wider than tall — the artwork already contains the wordmark. */
+function lgLockupMark(maxW = 190) {
+  const s = DB.settings();
+  const img = (s.logoImage || '').trim() || (window.BRAND_INFO ? BRAND_INFO.logoImage : '');
+  if (!img) return '';
+  return `<img class="lg-lockup-img" src="${img}" alt="${escapeHtml(s.shopName || 'Modern Dry Cleaners')}"
+            style="height:auto;width:${maxW}px;max-width:100%;object-fit:contain;"/>`;
+}
+
 function lgBrandMark(px = 46) {
   const s = DB.settings();
   const img = (s.logoImage || '').trim();
-  const isBundledDefault = !img || img === 'assets/img/logo.jpeg';
+  const isBundledDefault = !img || img === 'assets/img/logo.jpeg' || img === 'assets/img/logo.png';
 
   if (!isBundledDefault) {
     return `<img class="lg-mark-img" src="${img}" alt="${escapeHtml(s.shopName || 'Logo')}"
@@ -115,6 +125,15 @@ function renderLogin() {
         <span>${escapeHtml(phone)}</span>
       </a>`);
   }
+  const waRaw = (s.whatsapp || '').trim();
+  if (waRaw) {
+    const waDigits = waRaw.replace(/[^\d]/g, '').replace(/^0/, '92');
+    bandItems.push(`
+      <a class="lg-band-item lg-band-link" href="https://wa.me/${waDigits}" target="_blank" rel="noopener">
+        <svg class="lg-band-ico" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1-.2.3-.6.8-.8 1-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-2-1.2 7.4 7.4 0 0 1-1.4-1.7c-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5v-.5c0-.2-.6-1.5-.8-2-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.4-.2.3-.9.9-.9 2.1 0 1.3.9 2.5 1 2.7.1.2 1.7 2.7 4.2 3.7 2.1.8 2.5.7 3 .6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.2-.1-.4-.2Z"/></svg>
+        <span>${escapeHtml(waRaw)}</span>
+      </a>`);
+  }
   if (fbRaw) {
     bandItems.push(`
       <a class="lg-band-item lg-band-link" href="${escapeHtml(fbUrl)}" target="_blank" rel="noopener">
@@ -133,9 +152,8 @@ function renderLogin() {
 
       <header class="lg-hero-top">
         <div class="lg-brand">
-          <span class="lg-mark">${lgBrandMark(52)}</span>
-          <div class="lg-brand-text">
-            ${lgWordmark(shopName, false)}
+          <div class="lg-brand-stack">
+            ${lgLockupMark(210)}
             ${tagline ? `<div class="lg-brand-tag">${escapeHtml(tagline)}</div>` : ''}
           </div>
         </div>
@@ -172,12 +190,22 @@ function renderLogin() {
     <section class="lg-panel">
       <div class="lg-card">
         <div class="lg-card-brand">
-          <span class="lg-mark lg-mark-sm">${lgBrandMark(46)}</span>
-          <div class="lg-brand-text">
-            ${lgWordmark(shopName, true)}
+          <div class="lg-brand-stack">
+            ${lgLockupMark(168)}
             ${tagline ? `<div class="lg-brand-tag">${escapeHtml(tagline)}</div>` : ''}
           </div>
         </div>
+
+        ${(function () {
+          /* Occasion theme: greeting card inside the sign-in panel */
+          try {
+            if (!window.OCCASIONS) return '';
+            var oAct = OCCASIONS.active();
+            if (!oAct) return '';
+            var oCfg = OCCASIONS.config();
+            return OCCASIONS.greetHtml(oAct, { lang: oCfg.lang === 'en' ? 'en' : (oCfg.lang === 'ur' ? 'ur' : 'both') });
+          } catch (e) { return ''; }
+        })()}
 
         <h2 class="lg-title">${t('login.signin', 'Sign In')}</h2>
         <p class="lg-lede">${t('login.lede', 'Please enter your credentials to continue.')}</p>
@@ -248,6 +276,23 @@ function renderLogin() {
   appEl.innerHTML = html;
   appEl.classList.add('lg-mounted');
 
+  /* ---- occasion theme (Iqbal Day, Eid, 14 August …) ----
+     Runs after the markup exists; does nothing when no occasion is near. */
+  try {
+    if (window.OCCASIONS) {
+      const oact = OCCASIONS.decorateHero();
+      if (oact) {
+        // keep the language switcher / theme toggle readable on the dark hero
+        const chipWrap = document.querySelector('.oc-chip');
+        if (chipWrap && oact.occasion && oact.occasion.date) {
+          chipWrap.title = 'Occasion theme: ' + oact.occasion.name + ' (' + OCCASIONS.prettyDate(oact.occasion.date) + ')';
+        }
+      } else {
+        OCCASIONS.reset();
+      }
+    }
+  } catch (e) { console.warn('occasion theme skipped', e); }
+
   /* ---- password visibility ---- */
   const passEl = $('#lgPass');
   const eyeEl = $('#lgEye');
@@ -288,7 +333,8 @@ function renderLogin() {
     const f = new FormData(e.target);
     const btn = e.target.querySelector('button[type="submit"]');
 
-    let u = DB.login(f.get('username').trim(), f.get('password'));
+    // Password is checked against the hashed vault → always a Promise.
+    let u = await DB.login(f.get('username').trim(), f.get('password'));
 
     // If login fails, check if Cloud Sync is still initializing. If so, wait for it!
     if (!u && typeof CLOUD !== 'undefined' && CLOUD.isEnabled() && CLOUD.isReady() && !CLOUD._initialMergeDone) {
@@ -302,7 +348,7 @@ function renderLogin() {
       } catch (err) {}
       btn.innerHTML = origHtml;
       btn.disabled = false;
-      u = DB.login(f.get('username').trim(), f.get('password'));
+      u = await DB.login(f.get('username').trim(), f.get('password'));
     }
 
     if (!u) { toast(t('login.invalid') || 'Invalid username or password', 'error'); return; }

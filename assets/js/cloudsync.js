@@ -355,7 +355,7 @@ const CLOUD = {
         await CLOUD.push();
         await CLOUD.listen();
         CLOUD._initialMergeDone = true;
-        console.log('[Laundry POS] Cloud sync active — chunked storage');
+        console.log('[Modern Dry Cleaners] Cloud sync active — chunked storage');
         setTimeout(() => {
           if (typeof toast === 'function') toast('☁️ Cloud Sync active', 'success');
         }, 1500);
@@ -605,7 +605,7 @@ function openFirebaseSetupGuide() {
 
     <ol style="font-size:13px;line-height:1.8;padding-left:20px;">
       <li>Go to <a href="https://console.firebase.google.com/" target="_blank"><b>console.firebase.google.com</b></a> → sign in with Gmail</li>
-      <li>Click <b>"Add project"</b> → name it <b>"Laundry POS POS"</b> → continue</li>
+      <li>Click <b>"Add project"</b> → name it <b>"Modern Dry Cleaners"</b> → continue</li>
       <li>On the project home page, click the <b>Web icon</b> <code>&lt;/&gt;</code> to add a web app</li>
       <li>Left menu → <b>Build</b> → <b>Firestore Database</b> → <b>Create database</b></li>
       <li>Go to <b>Rules</b> tab and replace with:

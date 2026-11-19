@@ -21,6 +21,15 @@ function renderTaskBoard() {
         <div id="washingList" style="padding:10px;display:flex;flex-direction:column;gap:10px;max-height:600px;overflow-y:auto;"></div>
       </div>
 
+      <!-- PRESS LIST -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+        <div style="background:#c2410c;color:#fff;padding:12px 14px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;">
+          <span>🧺 TO PRESS</span>
+          <span id="pressCountBadge" style="background:#fff;color:#c2410c;padding:2px 8px;border-radius:12px;font-size:12px;">0</span>
+        </div>
+        <div id="pressList" style="padding:10px;display:flex;flex-direction:column;gap:10px;max-height:600px;overflow-y:auto;"></div>
+      </div>
+
       <!-- DEADLINES TODAY -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;border-top:4px solid #ea580c;">
         <div style="background:#ea580c;color:#fff;padding:12px 14px;font-weight:bold;display:flex;justify-content:space-between;align-items:center;">
@@ -45,14 +54,19 @@ function renderTaskBoardData() {
   const orders = DB.all('orders');
   const todayStr = isoDay();
 
-  // 1. Washing List: orders where status === 'washing' or 'pending'
-  const toWashOrders = orders.filter(o => ['washing', 'pending'].includes(o.status));
+  // 1. Washing List: jo kaam abhi baqi hai (pending / washing / press)
+  const toWashOrders = orders.filter(o => (typeof DB.isInWork === 'function' ? DB.isInWork(o.status) : ['washing','pending','ironing'].includes(o.status)));
   toWashOrders.sort((a,b) => (a.deliveryDate || '9999').localeCompare(b.deliveryDate || '9999'));
+
+  // 1b. Press List: sirf woh orders jo is waqt press ho rahe hain
+  const toPressOrders = orders.filter(o => o.status === 'ironing');
+  toPressOrders.sort((a,b) => (a.deliveryDate || '9999').localeCompare(b.deliveryDate || '9999'));
 
   // 2. Deadlines Today: orders where deliveryDate === today
   const deadlineOrders = orders.filter(o => o.deliveryDate === todayStr);
 
   $('#washCountBadge').textContent = `${toWashOrders.length} Orders`;
+  $('#pressCountBadge').textContent = `${toPressOrders.length} Orders`;
   $('#deadlineCountBadge').textContent = `${deadlineOrders.length} Orders`;
 
   const renderItem = (o) => {
@@ -65,7 +79,7 @@ function renderTaskBoardData() {
     else if (isDeadlineToday) delColor = '#ea580c';
     else if (isDeadlineTomorrow) delColor = '#ca8a04';
 
-    const inv = o.invoiceNo ? `INV-${o.invoiceNo}` : `#${o.id.slice(-6).toUpperCase()}`;
+    const inv = DB.invoiceLabel(o);
     const totalPcs = o.items.reduce((s,it) => s + it.qty, 0);
     const itemNames = o.items.map(it => `${it.name} ×${it.qty}`).join(', ');
 
@@ -76,10 +90,13 @@ function renderTaskBoardData() {
           <div style="font-size:13px;color:#475569;"><b>${totalPcs} pcs</b> (${escapeHtml(itemNames)})</div>
           <div style="font-size:12px;color:${delColor};font-weight:bold;margin-top:4px;">Delivery: ${o.deliveryDate ? escapeHtml(o.deliveryDate) : 'Not Set'}</div>
         </div>
-        <div>
-          ${['pending','washing'].includes(o.status) 
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          ${o.status === 'ironing'
             ? `<button class="btn btn-success btn-sm" onclick="app.go('orders'); setTimeout(()=>openStatusChange('${o.id}'),200);" style="padding:8px 12px;font-weight:bold;">✅ Ready</button>`
-            : `<span style="background:#dcfce7;color:#15803d;padding:4px 8px;border-radius:4px;font-weight:bold;font-size:12px;">✅ Ready</span>`
+            : (typeof DB.isInWork === 'function' ? DB.isInWork(o.status) : ['pending','washing'].includes(o.status))
+              ? `<button class="btn btn-secondary btn-sm" onclick="markOrderPress('${o.id}')" style="padding:8px 12px;font-weight:bold;">🧺 Press</button>
+                 <button class="btn btn-success btn-sm" onclick="app.go('orders'); setTimeout(()=>openStatusChange('${o.id}'),200);" style="padding:8px 10px;font-weight:bold;">✅ Ready</button>`
+              : `<span style="background:#dcfce7;color:#15803d;padding:4px 8px;border-radius:4px;font-weight:bold;font-size:12px;text-align:center;">${o.status === 'ready' ? '✅ Ready' : escapeHtml(o.status)}</span>`
           }
         </div>
       </div>
@@ -88,6 +105,9 @@ function renderTaskBoardData() {
 
   $('#washingList').innerHTML = toWashOrders.length ? toWashOrders.map(renderItem).join('') : '<div style="text-align:center;padding:20px;color:var(--text-soft);font-size:13px;">No pending washing tasks! 🎉</div>';
   
+  $('#pressList').innerHTML = toPressOrders.length ? toPressOrders.map(renderItem).join('')
+    : '<div style="text-align:center;padding:20px;color:var(--text-soft);font-size:13px;">Press ki line khali hai. 🧺</div>';
+
   $('#deadlineList').innerHTML = deadlineOrders.length ? deadlineOrders.map(renderItem).join('') : '<div style="text-align:center;padding:20px;color:var(--text-soft);font-size:13px;">No deliveries due today.</div>';
 }
 
@@ -109,7 +129,7 @@ function printTaskBoard() {
       </div>
       
       ${toWashOrders.map(o => {
-        const inv = o.invoiceNo ? `INV-${o.invoiceNo}` : `#${o.id.slice(-6).toUpperCase()}`;
+        const inv = DB.invoiceLabel(o);
         const totalPcs = o.items.reduce((s,it) => s + it.qty, 0);
         return `
           <div style="border-bottom:1px solid #aaa;padding:6px 0;margin-bottom:4px;page-break-inside:avoid;">
@@ -135,3 +155,34 @@ function printTaskBoard() {
   wrap.innerHTML = html;
   if (typeof printElement === 'function') printElement(wrap, { title: 'Task Board' });
 }
+
+
+/* ============================================================
+   Ek click mein "Press" — status update + WhatsApp + portal
+   ============================================================ */
+function markOrderPress(orderId, opts) {
+  const o = DB.get('orders', orderId);
+  if (!o) return;
+  const c = DB.get('customers', o.customerId) || {};
+  const askWa = !(opts && opts.silent);
+
+  const apply = () => {
+    const oldStatus = o.status;
+    DB.update('orders', orderId, { status: 'ironing', statusUpdatedAt: new Date().toISOString() });
+    if (typeof logAction === 'function') logAction('order.status', `${DB.invoiceLabel(o)} → Press (ironing)`);
+    toast('🧺 Press — customer ko update bhejein', 'success');
+    // portal cloud se sync hota hai — cloud on ho to foran push kar dein
+    if (typeof CLOUD !== 'undefined' && typeof CLOUD.pushNow === 'function') {
+      try { if (!CLOUD.isEnabled || CLOUD.isEnabled()) CLOUD.pushNow(); } catch (e) {}
+    }
+    if (oldStatus !== 'ironing' && typeof maybePromptWhatsAppOnStatus === 'function') {
+      setTimeout(() => maybePromptWhatsAppOnStatus(orderId, 'ironing', oldStatus), 250);
+    }
+    if (typeof renderTaskBoardData === 'function' && document.getElementById('washingList')) renderTaskBoardData();
+    if (typeof renderOrdersBody === 'function' && document.getElementById('ordersSummary')) renderOrdersBody();
+  };
+
+  if (!askWa) return apply();
+  confirmDialog(`🧺 ${DB.invoiceLabel(o)} ko "Press" par mark karein?\n\nCustomer: ${c.name || ''}\nStatus update hote hi WhatsApp message bhejne ka option aayega aur portal par bhi status change ho jayega.`, apply);
+}
+window.markOrderPress = markOrderPress;

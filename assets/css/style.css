@@ -4,9 +4,9 @@
    ============================================================ */
 
 :root {
-  --primary: #4f7cff;
-  --primary-dark: #3a63d8;
-  --primary-light: #eaf0ff;
+  --primary: #0b3f80;
+  --primary-dark: #0a3366;
+  --primary-light: #e9f1fa;
   --secondary: #ff7e5f;
   --success: #22c55e;
   --warning: #f59e0b;
@@ -41,7 +41,7 @@
   --text: #f1f5f9;
   --text-soft: #94a3b8;
   --text-mute: #64748b;
-  --primary-light: #1e2a4a;
+  --primary-light: #10203a;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -62,7 +62,7 @@ a { color: var(--primary); text-decoration: none; }
 /* ===================== LOGIN PAGE ===================== */
 .login-wrap { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); }
 .login-art {
-  background: linear-gradient(135deg, #4f7cff 0%, #6a5cff 100%);
+  background: linear-gradient(135deg, #0b3f80 0%, #0e9ad2 100%);
   display: flex; align-items: center; justify-content: center;
   padding: 40px; color: #fff; position: relative; overflow: hidden;
 }
@@ -124,7 +124,7 @@ a { color: var(--primary); text-decoration: none; }
 .sidebar .brand > * { position: relative; z-index: 1; }
 .sidebar .brand .logo {
   width:88px; height:88px; border-radius:18px;
-  background: linear-gradient(135deg, var(--primary), #6a5cff);
+  background: linear-gradient(135deg, var(--primary), #0e9ad2);
   display:flex; align-items:center; justify-content:center; color:#fff; font-size:38px;
   box-shadow: 0 14px 32px rgba(79,124,255,0.35), 0 0 0 4px rgba(255,255,255,0.6);
   transition: transform .3s cubic-bezier(.4,0,.2,1);
@@ -136,7 +136,7 @@ a { color: var(--primary); text-decoration: none; }
 }
 .sidebar .brand .name {
   font-weight: 900; font-size: 17px;
-  background: linear-gradient(135deg, var(--primary), #6a5cff);
+  background: linear-gradient(135deg, var(--primary), #0e9ad2);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -204,7 +204,7 @@ a { color: var(--primary); text-decoration: none; }
   position: relative;
 }
 .icon-btn:hover {
-  background: linear-gradient(135deg, var(--primary), #6a5cff);
+  background: linear-gradient(135deg, var(--primary), #0e9ad2);
   color: #fff; border-color: var(--primary);
   transform: translateY(-2px);
   box-shadow: 0 8px 18px rgba(79,124,255,0.3);
@@ -215,7 +215,7 @@ a { color: var(--primary); text-decoration: none; }
 }
 .user-chip .avatar {
   width:32px; height:32px; border-radius:50%;
-  background: linear-gradient(135deg,#4f7cff,#6a5cff); color:#fff;
+  background: linear-gradient(135deg,#0b3f80,#0e9ad2); color:#fff;
   display:flex; align-items:center; justify-content:center; font-weight:700;
 }
 .user-chip .uname { font-weight:600; font-size:13px; }
@@ -232,7 +232,7 @@ a { color: var(--primary); text-decoration: none; }
   transition:.15s; border: 1px solid transparent;
 }
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary), #6a5cff);
+  background: linear-gradient(135deg, var(--primary), #0e9ad2);
   color:#fff; box-shadow: 0 4px 12px rgba(79,124,255,0.3);
 }
 .btn-primary:hover {
@@ -299,7 +299,7 @@ a { color: var(--primary); text-decoration: none; }
   width:54px; height:54px; border-radius:14px; display:flex;
   align-items:center; justify-content:center; font-size:24px; color:#fff;
 }
-.stat-card .ic.b1 { background: linear-gradient(135deg,#4f7cff,#6a5cff); }
+.stat-card .ic.b1 { background: linear-gradient(135deg,#0b3f80,#0e9ad2); }
 .stat-card .ic.b2 { background: linear-gradient(135deg,#22c55e,#16a34a); }
 .stat-card .ic.b3 { background: linear-gradient(135deg,#f59e0b,#d97706); }
 .stat-card .ic.b4 { background: linear-gradient(135deg,#ec4899,#db2777); }
@@ -325,6 +325,43 @@ table.tbl { width:100%; border-collapse: collapse; }
 }
 .badge.pending  { background:#fef3c7; color:#92400e; }
 .badge.washing  { background:#dbeafe; color:#1e40af; }
+.badge.ironing  { background:#ffedd5; color:#9a3412; }
+
+/* Discount quick-pick chips (POS) — chhote, ek line mein, mobile par bhi fit */
+.disc-chips {
+  display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px;
+}
+/* .cart-summary ke andar button ko full-width banane wale rules ko override */
+.cart-summary .disc-chips .disc-chip,
+.pos-cart .cart-summary .disc-chips .disc-chip {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  display: inline-block;
+  padding: 5px 9px;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: none;
+  background-image: none;
+  transform: none;
+  transition: border-color .15s ease, color .15s ease;
+}
+.cart-summary .disc-chips .disc-chip:hover,
+.pos-cart .cart-summary .disc-chips .disc-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: #fff;
+  box-shadow: none;
+  background-position: left center;
+}
+.cart-summary .disc-chips .disc-chip.clear { color: var(--text-soft); font-weight: 600; }
+.cart-summary .disc-chips .disc-chip:active { transform: scale(.96); }
 .badge.ready    { background:#d1fae5; color:#065f46; }
 .badge.delivered{ background:#e0e7ff; color:#3730a3; }
 .badge.cancelled{ background:#fee2e2; color:#991b1b; }
@@ -423,7 +460,7 @@ table.tbl { width:100%; border-collapse: collapse; }
   box-shadow: 0 6px 16px rgba(79,124,255,0.15);
 }
 .cat-chip.active {
-  background: linear-gradient(135deg, var(--primary), #6a5cff);
+  background: linear-gradient(135deg, var(--primary), #0e9ad2);
   color:#fff; border-color: var(--primary);
   box-shadow: 0 8px 20px rgba(79,124,255,0.35);
   transform: translateY(-2px);
@@ -457,7 +494,7 @@ table.tbl { width:100%; border-collapse: collapse; }
   border-radius: 4px;
 }
 .product-grid::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #4f7cff, #6a5cff);
+  background: linear-gradient(180deg, #0b3f80, #0e9ad2);
 }
 
 .product-tile {
@@ -479,7 +516,7 @@ table.tbl { width:100%; border-collapse: collapse; }
 .product-tile:hover {
   transform: translateY(-3px);
   box-shadow: 0 12px 24px rgba(79,124,255,0.15);
-  border-color: #4f7cff;
+  border-color: #0b3f80;
 }
 .product-tile:active { transform: translateY(-1px); }
 
@@ -523,7 +560,7 @@ table.tbl { width:100%; border-collapse: collapse; }
 .product-tile .pprice {
   font-weight: 800;
   font-size: 15px;
-  color: #4f7cff;
+  color: #0b3f80;
   background: #eef4ff;
   padding: 4px 8px;
   border-radius: 8px;
@@ -537,7 +574,7 @@ table.tbl { width:100%; border-collapse: collapse; }
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4f7cff, #6a5cff);
+  background: linear-gradient(135deg, #0b3f80, #0e9ad2);
   color: #fff;
   display: flex;
   align-items: center;
@@ -575,7 +612,7 @@ table.tbl { width:100%; border-collapse: collapse; }
   padding: 18px 20px;
   border-bottom: 1px solid var(--border);
   display:flex; align-items:center; justify-content:space-between;
-  background: linear-gradient(135deg, var(--primary), #6a5cff);
+  background: linear-gradient(135deg, var(--primary), #0e9ad2);
   color: #fff;
 }
 .cart-header h3 { font-size:17px; color: #fff; margin:0; }
@@ -660,7 +697,7 @@ table.tbl { width:100%; border-collapse: collapse; }
   margin-top: 8px;
 }
 .cart-summary .row.total .v {
-  background: linear-gradient(135deg, var(--primary), #6a5cff);
+  background: linear-gradient(135deg, var(--primary), #0e9ad2);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -681,7 +718,7 @@ table.tbl { width:100%; border-collapse: collapse; }
 /* Big checkout button glow */
 .pos-cart .cart-summary .btn-primary,
 .pos-cart .cart-summary .btn-block {
-  background: linear-gradient(135deg, var(--primary), #6a5cff, #8b5cf6);
+  background: linear-gradient(135deg, var(--primary), #0e9ad2, #8b5cf6);
   background-size: 200% auto;
   box-shadow: 0 8px 24px rgba(79,124,255,0.4);
   font-weight: 800; font-size: 15px;
@@ -1339,6 +1376,25 @@ html[dir="rtl"] .lg-headline-accent bdi { unicode-bidi: isolate; }
 html[dir="rtl"] .lg-brand-text { text-align: right; }
 html[dir="rtl"] .lg-headline { line-height: 1.35; }
 .lg-portal-word { margin-inline-start: 0; }
+
+
+/* ============================================================
+   BRAND LOCKUP  —  Modern Dry Cleaners
+   The uploaded brand art already carries the wordmark, so the
+   login hero shows the lockup itself (no duplicated text).
+   ============================================================ */
+.lg-brand-stack { display: flex; flex-direction: column; gap: 8px; }
+.lg-lockup-img {
+  display: block;
+  /* the artwork is dark navy on white — keep it crisp on the light hero */
+  mix-blend-mode: multiply;
+  filter: drop-shadow(0 2px 6px rgba(15,43,70,0.10));
+}
+.lg-card-brand .lg-lockup-img { width: 168px; }
+.lg-card-brand { flex-wrap: nowrap; }
+@media (max-width: 560px) {
+  .lg-brand-stack .lg-lockup-img { width: 168px; }
+}
 
 /* ============================================================
    DARK MODE — top bar was hard-coded white, leaving white text

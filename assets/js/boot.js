@@ -38,14 +38,34 @@ window.BOOT = (function () {
     '<rect x="19.5" y="38" width="31" height="26" rx="5"/>' +
     '<circle cx="35" cy="51" r="7.4"/></svg>';
 
+  var BUNDLED_LOGOS = ['assets/img/logo.jpeg', 'assets/img/logo.png'];
+
   function markHtml(settings) {
     var img = String(settings.logoImage || '').trim();
-    var isBundledDefault = !img || img === 'assets/img/logo.jpeg';
+    var isBundledDefault = !img || BUNDLED_LOGOS.indexOf(img) !== -1;
     if (!isBundledDefault) {
       return '<img class="boot-logo-img" src="' + escapeHtml(img) + '" alt="' +
              escapeHtml(settings.shopName || 'Logo') + '" />';
     }
     return HANGER_SVG;
+  }
+
+  /* The bundled artwork already carries the shop name, so the wordmark line
+     is only printed when the owner has uploaded their own (usually icon-only) logo. */
+  function isBundledLockup(settings) {
+    var img = String(settings.logoImage || '').trim();
+    return !img || BUNDLED_LOGOS.indexOf(img) !== -1;
+  }
+
+  /* Brand lockup ("Modern DRY CLEANERS") — used on the dark boot screen so the
+     real shop branding shows while the workspace loads. Sits on a white card
+     because the artwork is navy-on-white. */
+  function lockupHtml(settings) {
+    var img = String(settings.logoImage || '').trim();
+    var isBundledDefault = !img || BUNDLED_LOGOS.indexOf(img) !== -1;
+    var src = isBundledDefault ? 'assets/img/brand-logo.png' : img;
+    return '<img class="boot-lockup-img" src="' + escapeHtml(src) + '" alt="' +
+           escapeHtml(settings.shopName || 'Modern Dry Cleaners') + '" />';
   }
 
   function wordmarkHtml(shopName) {
@@ -97,15 +117,9 @@ window.BOOT = (function () {
       '<div class="boot-grid" aria-hidden="true"></div>' +
 
       '<div class="boot-core">' +
-        '<div class="boot-logo-wrap">' +
-          '<svg class="boot-ring" viewBox="0 0 120 120" aria-hidden="true">' +
-            '<circle class="boot-ring-track" cx="60" cy="60" r="55"/>' +
-            '<circle class="boot-ring-spin" cx="60" cy="60" r="55"/>' +
-          '</svg>' +
-          '<div class="boot-logo">' + markHtml(s) + '</div>' +
-        '</div>' +
+        '<div class="boot-lockup">' + lockupHtml(s) + '</div>' +
 
-        '<div class="boot-name">' + wordmarkHtml(shopName) + '</div>' +
+        (isBundledLockup(s) ? '' : '<div class="boot-name">' + wordmarkHtml(shopName) + '</div>') +
         (tagline ? '<div class="boot-tagline">' + escapeHtml(tagline) + '</div>' : '') +
 
         '<div class="boot-status">' +
@@ -188,7 +202,8 @@ window.BOOT = (function () {
   }
   function mark(s) {
     var img = String(s.logoImage || '').trim();
-    if (img && img !== 'assets/img/logo.jpeg') {
+    if (img === 'assets/img/logo.jpeg') img = 'assets/img/logo.png';
+    if (img) {
       return '<img class="bq-logo-img" src="' + esc(img) + '" alt="" />';
     }
     return '<svg viewBox="0 0 70 70" fill="none" stroke="currentColor" stroke-width="3.4" ' +

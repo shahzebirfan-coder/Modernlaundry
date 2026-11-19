@@ -179,7 +179,7 @@ function bindLayout() {
       </div>
       <div style="background:#f1f5f9;padding:20px;border-radius:8px;margin-top:15px;text-align:center;box-shadow:inset 0 2px 4px rgba(0,0,0,0.05);">
         <div style="display:flex; align-items:center; justify-content:center; margin-bottom:5px;">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4f7cff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0b3f80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
           <span style="font-weight:900; font-size:22px; color:#0f172a; letter-spacing:0.5px;">CelineSoft</span>
         </div>
         <div style="font-size:12px;color:#64748b;margin-bottom:20px;font-weight:600;">${cTagline}</div>

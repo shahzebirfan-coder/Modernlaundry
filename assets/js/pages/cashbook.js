@@ -260,7 +260,7 @@ function printZReport(closureId) {
       ${closure.note ? `<div style="font-size:12px;font-style:italic;margin-top:10px;border-top:1px dashed #000;padding-top:6px;">Notes: ${escapeHtml(closure.note)}</div>` : ''}
       
       <div style="text-align:center;font-size:10px;margin-top:14px;">
-        End of Shift Report - Powered by Laundry POS POS
+        End of Shift Report - Powered by Modern Dry Cleaners
       </div>
     </div>
   `;

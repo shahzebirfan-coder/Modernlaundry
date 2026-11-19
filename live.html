@@ -8,8 +8,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>Laundry POS — Live Dashboard</title>
-  <link rel="icon" href="assets/img/logo.jpeg" />
+  <title>Modern Dry Cleaners — Live Dashboard</title>
+  <link rel="icon" href="assets/img/logo.png" />
   <style>
     /* ============================================================
        MR LAUNDRY — LIVE DASHBOARD (Secret Page)
@@ -193,7 +193,7 @@
   <div class="lock-screen" id="lockScreen">
     <div class="lock-box">
       <div class="logo">
-        <img src="assets/img/logo.jpeg" alt="" onerror="this.parentElement.innerHTML='🧺'"/>
+        <img src="assets/img/logo.png" alt="" onerror="this.parentElement.innerHTML='🧺'"/>
       </div>
       <h2>Live Dashboard</h2>
       <p>Enter PIN to continue</p>
@@ -208,10 +208,10 @@
   <div id="dashboard" class="hidden">
     <div class="top-bar">
       <div class="logo-box">
-        <img src="assets/img/logo.jpeg" alt="" onerror="this.parentElement.innerHTML='🧺'"/>
+        <img src="assets/img/logo.png" alt="" onerror="this.parentElement.innerHTML='🧺'"/>
       </div>
       <div class="title-block">
-        <h1 id="shopName">Laundry POS</h1>
+        <h1 id="shopName">Modern Dry Cleaners</h1>
         <div class="sub">Live Owner Dashboard</div>
       </div>
       <div class="live-dot">LIVE</div>
@@ -249,8 +249,13 @@
        🔐 SECRET DASHBOARD CONFIG  — EDIT ONLY THESE LINES
        ============================================================ */
 
-    // 1) PIN (any 4-digit number you want, e.g., '7890')
-    const SECRET_PIN = '1234';
+    // 1) PIN — NOT stored here.
+    //    The owner sets it once on this page (first run) and only a PBKDF2
+    //    verifier is kept in the browser vault (key: 'livepin'). To change or
+    //    reset it: Settings → Data & Security → Live Dashboard PIN, or clear
+    //    the browser storage for this page and set a fresh PIN.
+    //    Legacy builds had the PIN hard-coded in this file — if one is found
+    //    in mdcCodeVaultV1 it is used, otherwise the first visitor sets it.
 
     // 2) Firebase config — LEFT BLANK ON PURPOSE.
     //    This page reads the Firebase project that the shop owner already saved
@@ -303,9 +308,50 @@
       sessionStorage.setItem(SESSION_KEY, '1');
       startDashboard();
     }
-    function tryUnlock() {
+    /* ---- PIN verifier (PBKDF2, no plaintext in storage) ---- */
+    const CODE_KEY = 'mdcCodeVaultV1';
+
+    function codeVault() {
+      try { return JSON.parse(localStorage.getItem(CODE_KEY) || '{}') || {}; } catch (e) { return {}; }
+    }
+    function savePinVerifier(salt, hash, it) {
+      const v = codeVault();
+      v.livepin = { v: 1, it: it, salt: salt, hash: hash, updatedAt: new Date().toISOString() };
+      localStorage.setItem(CODE_KEY, JSON.stringify(v));
+    }
+    function derive(secret, salt, iterations) {
+      const st = window.crypto && (window.crypto.subtle || window.crypto.webkitSubtle);
+      if (!st) return Promise.resolve(null);
+      const enc = new TextEncoder();
+      return st.importKey('raw', enc.encode(String(secret)), { name: 'PBKDF2' }, false, ['deriveBits'])
+        .then(k => st.deriveBits({ name: 'PBKDF2', salt: enc.encode(salt), iterations, hash: 'SHA-256' }, k, 256))
+        .then(bits => Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join(''));
+    }
+    function randomHex(n) {
+      const a = new Uint8Array(n);
+      (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach((_, i) => a[i] = Math.floor(Math.random() * 256));
+      return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function tryUnlock() {
       const v = (pinInput.value || '').trim();
-      if (v === SECRET_PIN) {
+      if (v.length < 4) { pinError.textContent = 'PIN must be at least 4 digits.'; return; }
+
+      const rec = codeVault().livepin;
+      if (!rec || !rec.hash) {
+        // First run on this device: the PIN entered now becomes the verifier.
+        const salt = randomHex(16);
+        const hash = await derive(v, salt, 120000);
+        if (!hash) { pinError.textContent = 'This browser cannot secure the PIN. Use Chrome/Edge.'; return; }
+        savePinVerifier(salt, hash, 120000);
+        pinError.textContent = '';
+        alert('PIN saved for this device. Keep it safe — it cannot be recovered from storage.');
+        unlock();
+        return;
+      }
+
+      const hash = await derive(v, rec.salt, rec.it || 120000);
+      if (hash && hash === rec.hash) {
         pinError.textContent = '';
         unlock();
       } else {
@@ -505,7 +551,7 @@
       // Today's profit (cash basis — same as main POS dashboard)
       const todayProfit = todayCash - todayExp;
 
-      const washCount = orders.filter(o => ['pending', 'washing'].includes(o.status)).length;
+      const washCount = orders.filter(o => (typeof DB !== 'undefined' && DB.isInWork) ? DB.isInWork(o.status) : ['pending','washing','ironing'].includes(o.status)).length;
       const deadlineCount = orders.filter(o => o.deliveryDate === today && o.status !== 'delivered' && o.status !== 'cancelled').length;
 
       return {
@@ -617,7 +663,7 @@
         if (_firstLoad) renderLoading();
         const data = await fetchCloudData();
         const stats = computeTodayStats(data);
-        const shopName = (data.settings && data.settings.shopName) || 'Laundry POS';
+        const shopName = (data.settings && data.settings.shopName) || 'Modern Dry Cleaners';
         renderStats(stats, shopName);
         const now = new Date();
         document.getElementById('lastUpdate').textContent =
@@ -653,5 +699,6 @@
       }
     });
   </script>
+  <script src="assets/js/guard.js?v=20261119.10"></script>
 </body>
 </html>

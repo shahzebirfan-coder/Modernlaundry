@@ -53,7 +53,7 @@ function renderDashboard() {
   const monthProfit  = monthReceived - monthExp;
 
   // === PIPELINE ===
-    const pending = orders.filter(o => ['pending','washing'].includes(o.status)).length;
+  const pending = orders.filter(o => (typeof DB.isInWork === 'function' ? DB.isInWork(o.status) : ['pending','washing','ironing'].includes(o.status))).length;
   const ready = orders.filter(o => o.status === 'ready').length;
   
   const cutoff = new Date();
@@ -83,7 +83,7 @@ function renderDashboard() {
     : last7.map(d => `
     <div style="display:flex;flex-direction:column;align-items:center;flex:1;">
       <div style="display:flex;flex-direction:column;justify-content:flex-end;height:140px;width:100%;padding:0 6px;">
-        <div title="${fmtMoney(d.value)}" style="background:linear-gradient(180deg,#4f7cff,#6a5cff);height:${(d.value/maxVal)*100}%;min-height:4px;border-radius:6px 6px 0 0;"></div>
+        <div title="${fmtMoney(d.value)}" style="background:linear-gradient(180deg,#0b3f80,#0e9ad2);height:${(d.value/maxVal)*100}%;min-height:4px;border-radius:6px 6px 0 0;"></div>
       </div>
       <div style="font-size:11px;color:var(--text-soft);margin-top:6px;">${d.label}</div>
       <div style="font-size:11px;font-weight:700;">${d.value? fmtMoney(d.value):'—'}</div>
@@ -97,7 +97,7 @@ function renderDashboard() {
       <td><b>#${o.id.slice(-6).toUpperCase()}</b></td>
       <td>${escapeHtml(c.name)}</td>
       <td>${o.items.length} items</td>
-      <td><span class="badge ${o.status}">${o.status}</span></td>
+      <td><span class="badge ${o.status}">${typeof statusBadgeLabel === "function" ? statusBadgeLabel(o.status) : o.status}</span></td>
       <td><b>${fmtMoney(o.total)}</b></td>
       <td>${fmtDate(o.createdAt)}</td>
     </tr>`;
@@ -108,7 +108,7 @@ function renderDashboard() {
     ${(() => {
       const s = DB.settings();
       const u = DB.currentUser();
-      if (u && u.role === 'admin' && !s.masterRecoveryCode) {
+      if (u && u.role === 'admin' && !(s.masterRecoveryCodeHash || s.masterRecoveryCode)) {
         return `<div onclick="app.go('settings')" style="background:linear-gradient(135deg,#fee2e2,#fef3c7);border:2px solid #f59e0b;color:#78350f;padding:14px 18px;border-radius:12px;margin-bottom:18px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
           <div style="flex:1;min-width:250px;">
             <div style="font-weight:800;font-size:15px;margin-bottom:4px;">🔑 Set Up Master Recovery Code (Important!)</div>
@@ -150,8 +150,8 @@ function renderDashboard() {
 
     <!-- Row 1: Money flow -->
     <div class="dash-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:14px;">
-      <div class="stat-card stat-clickable" onclick="app.go('orders')" style="background:linear-gradient(135deg,#dbeafe,#eff6ff);border-left:4px solid #4f7cff;">
-        <div class="ic" style="background:#4f7cff;color:#fff;">💰</div>
+      <div class="stat-card stat-clickable" onclick="app.go('orders')" style="background:linear-gradient(135deg,#dbeafe,#eff6ff);border-left:4px solid #0b3f80;">
+        <div class="ic" style="background:#0b3f80;color:#fff;">💰</div>
         <div>
           <div class="lbl">Today's Sales</div>
           <div class="val">${fmtMoney(todayInvoice)}</div>
@@ -217,7 +217,7 @@ function renderDashboard() {
             <div style="font-size:12px;color:#6366f1;">Click to view all active orders</div>
           </div>
         </div>
-        <div style="font-weight:700;color:#4f7cff;font-size:13px;">View All -></div>
+        <div style="font-weight:700;color:#0b3f80;font-size:13px;">View All -></div>
       </div>
     ` : ''}
 
@@ -234,9 +234,9 @@ function renderDashboard() {
                 const days = Math.floor((new Date() - new Date(o.createdAt)) / 86400000);
                 const phoneWa = (c.phone||'').replace(/[^\d+]/g, '');
                 const waNum = phoneWa.startsWith('0') && phoneWa.length===11 ? '92'+phoneWa.substring(1) : (phoneWa.startsWith('+') ? phoneWa.substring(1) : phoneWa);
-                const msg = encodeURIComponent(`Hi ${c.name}, this is a gentle reminder from Laundry POS that your order (INV-${o.invoiceNo||o.id.slice(-6).toUpperCase()}) has been ready for ${days} days. Please collect it soon!`);
+                const msg = encodeURIComponent(`Hi ${c.name}, this is a gentle reminder from Modern Dry Cleaners that your order (${DB.invoiceLabel(o)}) has been ready for ${days} days. Please collect it soon!`);
                 return `<tr>
-                  <td><b>INV-${o.invoiceNo || o.id.slice(-6).toUpperCase()}</b>${o.location ? `<br><span style="font-size:10px;background:#fef08a;padding:2px 4px;border-radius:4px;border:1px solid #f59e0b;">📍 ${escapeHtml(o.location)}</span>` : ''}</td>
+                  <td><b>${DB.invoiceLabel(o)}</b>${o.location ? `<br><span style="font-size:10px;background:#fef08a;padding:2px 4px;border-radius:4px;border:1px solid #f59e0b;">📍 ${escapeHtml(o.location)}</span>` : ''}</td>
                   <td>${escapeHtml(c.name)}<br><small style="color:var(--text-soft);">${escapeHtml(c.phone||'-')}</small></td>
                   <td>${fmtDateShort(o.createdAt)}<br><small style="color:#ef4444;font-weight:bold;">${days} days ago</small></td>
                   <td><span class="badge cancelled" style="font-size:10px;">Overdue</span></td>
@@ -360,7 +360,7 @@ function renderDashboard() {
           <tbody>
             ${todayPayments.map(p => {
               const c = DB.get('customers', p.customerId) || { name:'Walk-in' };
-              const inv = p.invoiceNo ? `INV-${p.invoiceNo}` : '#'+p.orderId.slice(-6).toUpperCase();
+              const inv = DB.invoiceLabel(p);
               const emoji = ({cash:'💵',card:'💳',bank:'🏦',jazzcash:'📱',easypaisa:'📱',cheque:'📃',online:'🌐',credit:'📋'}[p.method] || '💰');
               return `<tr>
                 <td>${new Date(p.at).toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'})}</td>

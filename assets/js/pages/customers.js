@@ -166,10 +166,10 @@ function openCustomerHistory(custId) {
 
   const rows = orders.length ? orders.map(o => `
     <tr>
-      <td><b>#${o.invoiceNo || o.id.slice(-6).toUpperCase()}</b></td>
+      <td><b>${DB.invoiceLabel(o)}</b></td>
       <td>${fmtDateShort(o.createdAt)}</td>
       <td>${o.items.length}</td>
-      <td><span class="badge ${o.status}">${o.status}</span></td>
+      <td><span class="badge ${o.status}">${typeof statusBadgeLabel === "function" ? statusBadgeLabel(o.status) : o.status}</span></td>
       <td><b>${fmtMoney(o.total)}</b></td>
       <td>${o.due>0?`<span class="badge due">Due ${fmtMoney(o.due)}</span>`:`<span class="badge paid">Paid</span>`}</td>
       <td><button class="btn btn-secondary btn-sm" onclick="closeModal();openInvoice('${o.id}')">👁️ View</button></td>

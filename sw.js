@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mr-laundry-pos-v17';
+const CACHE_NAME = 'modern-dry-cleaners-pos-v26';
 const urlsToCache = [
   './',
   './index.html',
@@ -6,15 +6,20 @@ const urlsToCache = [
   './assets/css/responsive.css',
   './assets/css/boot.css',
   './assets/css/expenses.css',
-  './assets/img/logo.jpeg',
+  './assets/img/logo.png',
+  './assets/img/brand-logo.png',
   './assets/js/app.js',
   './assets/js/auth-recovery.js',
   './assets/js/it-core.js',
+  './assets/js/vault.js',
+  './assets/js/guard.js',
   './assets/js/client-config.js',
   './assets/js/cloud-autoconfig.js',
   './assets/js/cloudsync.js',
   './assets/js/components.js',
   './assets/js/db.js',
+  './assets/js/pickup-ops.js',
+  './assets/js/occasions.js',
   './assets/js/extras.js',
   './assets/js/gdrive.js',
   './assets/js/i18n.js',

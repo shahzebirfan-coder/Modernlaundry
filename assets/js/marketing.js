@@ -12,13 +12,13 @@ const AI_PROMOS = [
     title: 'Buy 3 Get 1 Free', 
     desc: 'Encourage bulk orders. Send this to customers who usually only bring 1 or 2 items.',
     offerText: 'BUY 3 GET 1 FREE',
-    msg: 'Hi {name}! We miss you at Laundry POS. Bring in 4 items this week and get the cheapest one washed entirely FREE! Use code {promo}.'
+    msg: 'Hi {name}! We miss you at Modern Dry Cleaners. Bring in 4 items this week and get the cheapest one washed entirely FREE! Use code {promo}.'
   },
   { 
     title: 'Sleeping Customer Revival', 
     desc: 'Target customers who haven\'t visited in 45 days with a flat 20% discount.',
     offerText: '20% OFF EVERYTHING',
-    msg: 'Hello {name}, it\'s been a while! Come back to Laundry POS this week and get a flat 20% OFF your entire bill. Mention code {promo}.'
+    msg: 'Hello {name}, it\'s been a while! Come back to Modern Dry Cleaners this week and get a flat 20% OFF your entire bill. Mention code {promo}.'
   }
 ];
 
@@ -194,7 +194,7 @@ function renderMarketing() {
     ctx.shadowColor = 'rgba(0,0,0,0.8)';
     ctx.shadowBlur = 10;
     ctx.font = '900 60px sans-serif';
-    ctx.fillText('🧺 ' + (s.shopName||'Laundry POS'), 40, 80);
+    ctx.fillText('🧺 ' + (s.shopName||'Modern Dry Cleaners'), 40, 80);
     
     // Draw Sticker
     ctx.save();

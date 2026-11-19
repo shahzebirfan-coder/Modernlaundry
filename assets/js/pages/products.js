@@ -18,7 +18,7 @@ function renderProducts() {
             </select>
             <button class="btn btn-primary btn-sm" id="addProdBtn">+ Add Product</button>
             <button class="btn btn-success btn-sm" id="bulkImgBtn" title="Upload images for many products quickly">📷 Bulk Image Manager</button>
-            ${DB.currentUser().role==='admin' ? `<button class="btn btn-warning btn-sm" id="importRateBtn" title="Replace all products with Laundry POS official rate list">📋 Import Rate List</button>`:''}
+            ${DB.currentUser().role==='admin' ? `<button class="btn btn-warning btn-sm" id="importRateBtn" title="Replace all products with Modern Dry Cleaners official rate list">📋 Import Rate List</button>`:''}
           </div>
         </div>
         <div style="padding:8px 16px;font-size:12px;color:var(--text-soft);border-bottom:1px solid var(--border);background:var(--surface-alt);">
@@ -50,7 +50,7 @@ function renderProducts() {
 }
 
 function importRateList() {
-  confirmDialog('⚠️ This will REPLACE all products with the official Laundry POS rate list (Gents, Ladies, Others). Your customers, orders, and expenses will NOT be affected. Continue?', () => {
+  confirmDialog('⚠️ This will REPLACE all products with the official Modern Dry Cleaners rate list (Gents, Ladies, Others). Your customers, orders, and expenses will NOT be affected. Continue?', () => {
     DB._data.products = getMrLaundryRateList();
     DB._data.categories = [
       { id: 'cgents',  name: 'Gents Wear',  icon: '👔' },
@@ -329,7 +329,7 @@ function openBulkImageManager() {
           ${hasImg ? '<div style="position:absolute;top:4px;right:4px;background:#10b981;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</div>' : ''}
           <div style="width:80px;height:80px;margin:0 auto 6px;border-radius:10px;background:linear-gradient(135deg,#e0e7ff,#fff);display:flex;align-items:center;justify-content:center;overflow:hidden;">${productImageHTML(p.image, 80)}</div>
           <div style="font-weight:700;font-size:12px;line-height:1.2;height:30px;overflow:hidden;">${escapeHtml(p.name)}</div>
-          <div style="font-size:11px;color:#4f7cff;font-weight:700;">Rs. ${p.price}</div>
+          <div style="font-size:11px;color:#0b3f80;font-weight:700;">Rs. ${p.price}</div>
         </div>`;
       }).join('') || '<div class="empty" style="grid-column:1/-1;padding:30px;"><div class="emoji">🔍</div><h4>No products match</h4></div>';
 

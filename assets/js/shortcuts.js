@@ -115,7 +115,7 @@ function openGlobalSearch() {
           results.push({
             type: 'order',
             icon: '🧾',
-            title: `INV-${o.invoiceNo||o.id.slice(-6).toUpperCase()} — ${c.name||'Walk-in'}`,
+            title: `${DB.invoiceLabel(o)} — ${c.name||'Walk-in'}`,
             subtitle: `${o.items.length} items • ${fmtMoney(o.total)} • ${o.status} • ${fmtDateShort(o.createdAt)}`,
             action: () => { closeModal(); openInvoice(o.id); }
           });

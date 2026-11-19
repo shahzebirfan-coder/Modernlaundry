@@ -99,6 +99,7 @@ const TRANSLATIONS = {
   // Order statuses
   'status.pending':      { en: 'Pending',     ur: 'زیرِ التواء',  rmn: 'Pending' },
   'status.washing':      { en: 'Washing',     ur: 'دھلائی میں',  rmn: 'Dho Rahe Hain' },
+  'status.ironing':      { en: 'Press (Ironing)', ur: 'پریس (استری)', rmn: 'Press (Istri)' },
   'status.ready':        { en: 'Ready',       ur: 'تیار',         rmn: 'Tayyar' },
   'status.delivered':    { en: 'Delivered',   ur: 'ڈیلیور ہو گیا', rmn: 'Deliver Ho Gaya' },
   'status.cancelled':    { en: 'Cancelled',   ur: 'منسوخ',        rmn: 'Cancel' },
@@ -329,7 +330,7 @@ function openLanguagePicker() {
     return `<button class="lang-option ${active?'active':''}" data-lang="${code}" type="button" style="
       display:flex;align-items:center;gap:14px;
       padding:18px;background:${active?'#dbeafe':'#fff'};
-      border:2px solid ${active?'#4f7cff':'#e5e9f2'};
+      border:2px solid ${active?'#0b3f80':'#e5e9f2'};
       border-radius:14px;cursor:pointer;width:100%;
       font-family:inherit;transition:.15s;
     ">
@@ -338,7 +339,7 @@ function openLanguagePicker() {
         <div style="font-weight:800;font-size:18px;${code==='ur'?'font-family:&quot;Noto Nastaliq Urdu&quot;,serif;':''}">${meta.nativeName}</div>
         <div style="font-size:12px;color:#666;">${meta.name} ${meta.dir==='rtl'?'(دائیں سے بائیں)':''}</div>
       </div>
-      ${active ? '<div style="color:#4f7cff;font-size:22px;">✓</div>' : '<div style="color:#aaa;">→</div>'}
+      ${active ? '<div style="color:#0b3f80;font-size:22px;">✓</div>' : '<div style="color:#aaa;">→</div>'}
     </button>`;
   }).join('');
 

@@ -37,13 +37,27 @@ window.THERMAL = (function () {
     return PAPER[p] || PAPER['80'];
   }
 
-  /* Target logo width in printer dots, from the chosen size. */
+  /* Target logo width in printer dots.
+     % is measured against the PAPER width (what the shopkeeper expects when
+     they type "70%"), but the result is never wider than the real printable
+     area — that was the cause of logos running off the edge of the slip. */
   function targetDots(settings) {
     var paper = paperFor(settings);
-    var pct = +((settings && settings.invoiceLogoSize) || 62); // % of printable width
-    if (!isFinite(pct) || pct <= 0) pct = 62;
+    var pct = +((settings && settings.invoiceLogoSize) || 70);
+    if (!isFinite(pct) || pct <= 0) pct = 70;
     pct = Math.max(20, Math.min(100, pct));
-    return Math.max(64, Math.round(paper.dots * pct / 100));
+    var printable = Math.round(paper.printableMm * DOTS_PER_MM);   // 48mm→384, 72mm→576
+    var dots = Math.round(paper.dots * pct / 100);
+    return Math.max(64, Math.min(dots, printable));
+  }
+
+  /* Height budget in dots — a tall lockup must not eat half the receipt.
+     Default 26mm keeps the logo as a header, not the whole bill. */
+  function maxHeightDots(settings) {
+    var mm = +((settings && settings.invoiceLogoMaxMm) || 26);
+    if (!isFinite(mm) || mm <= 0) mm = 26;
+    mm = Math.max(8, Math.min(60, mm));
+    return Math.round(mm * DOTS_PER_MM);
   }
 
   /* Physical mm width — used in the print CSS so the logo is the
@@ -66,25 +80,44 @@ window.THERMAL = (function () {
   function process(src, opts) {
     opts = opts || {};
     var maxDots = opts.maxDots || 400;
+    var maxHDots = opts.maxHDots || 0;            // 0 = no height budget
     var mono = opts.mono !== false;
     var dither = !!opts.dither;
+    var thresh = opts.threshold != null ? opts.threshold : 180;
 
     return loadImage(src).then(function (img) {
       var sw = img.naturalWidth || img.width;
       var sh = img.naturalHeight || img.height;
       if (!sw || !sh) throw new Error('logo has no size');
 
-      // Scale to the target dot width (never upscale beyond 2x)
-      var scale = Math.min(maxDots / sw, 2);
+      // Target size in printer dots, respecting both the width and height budget.
+      var scale = Math.min(maxDots / sw, maxHDots ? maxHDots / sh : 99);
       var w = Math.max(1, Math.round(sw * scale));
       var h = Math.max(1, Math.round(sh * scale));
 
       // --- pass A: draw on a TRANSPARENT canvas to capture the alpha mask ---
+      // Two-stage (2x then final) downscale: a single jump straight to ~400 dots
+      // feathers thin strokes into grey, which a 1-bit head then drops entirely
+      // (that is why small text like "DRY CLEANERS" disappeared / muddied).
+      function drawScaled(ctx, cw, ch) {
+        var tmp = document.createElement('canvas');
+        var preW = Math.min(sw, Math.max(cw * 2, cw));
+        var preH = Math.max(1, Math.round(preW * (ch / cw)));
+        tmp.width = preW; tmp.height = preH;
+        var tctx = tmp.getContext('2d');
+        tctx.imageSmoothingEnabled = true;
+        tctx.imageSmoothingQuality = 'high';
+        tctx.drawImage(img, 0, 0, preW, preH);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(tmp, 0, 0, cw, ch);
+      }
+
       var alphaCv = document.createElement('canvas');
       alphaCv.width = w; alphaCv.height = h;
       var actx = alphaCv.getContext('2d', { willReadFrequently: true });
       actx.clearRect(0, 0, w, h);
-      actx.drawImage(img, 0, 0, w, h);
+      drawScaled(actx, w, h);
       var alphaData = actx.getImageData(0, 0, w, h).data;
       var opaque = new Uint8Array(w * h);
       for (var ai = 0, aj = 0; ai < alphaData.length; ai += 4, aj++) {
@@ -97,7 +130,7 @@ window.THERMAL = (function () {
       var ctx = cv.getContext('2d', { willReadFrequently: true });
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0, w, h);
+      drawScaled(ctx, w, h);
 
       var data = ctx.getImageData(0, 0, w, h);
       var px = data.data;
@@ -120,9 +153,10 @@ window.THERMAL = (function () {
         gray[j] = invert ? (255 - g) : g;
       }
 
-      // 4) to 1-bit
+      // 4) to 1-bit — thermal heads burn a little lighter than screen black,
+      //    so a slightly generous threshold keeps hairlines from fading away.
       var out = new Uint8ClampedArray(w * h * 4);
-      var THRESH = 165;
+      var THRESH = thresh;
       for (var k = 0; k < gray.length; k++) {
         var v;
         if (!mono) {
@@ -207,7 +241,8 @@ window.THERMAL = (function () {
   function keyFor(settings) {
     var src = String((settings && settings.logoImage) || '');
     var sig = src.length > 120 ? (src.length + ':' + src.slice(-80)) : src;
-    return sig + '|' + targetDots(settings) + '|' + (settings && settings.invoiceLogoMono !== false ? 'm' : 'c');
+    return sig + '|' + targetDots(settings) + 'x' + maxHeightDots(settings) +
+           '|' + (settings && settings.invoiceLogoMono !== false ? 'm' : 'c');
   }
 
   var pending = null;
@@ -223,8 +258,10 @@ window.THERMAL = (function () {
 
     var promise = process(src, {
       maxDots: targetDots(settings),
+      maxHDots: maxHeightDots(settings),
       mono: (settings && settings.invoiceLogoMono !== false),
-      dither: false
+      dither: false,
+      threshold: (settings && settings.invoiceLogoThreshold) || 180
     }).then(function (res) {
       cache = { key: key, dataUrl: res.dataUrl, w: res.width, h: res.height,
                 inverted: res.inverted, meanLuma: res.meanLuma };
@@ -238,6 +275,18 @@ window.THERMAL = (function () {
 
     pending = { key: key, promise: promise };
     return promise;
+  }
+
+  /* Full cached record (dataUrl + dot size + physical mm) for exact sizing. */
+  function info(settings) {
+    var key = keyFor(settings);
+    if (cache.key === key && cache.dataUrl) {
+      return { dataUrl: cache.dataUrl, w: cache.w, h: cache.h,
+               mm: Math.round(cache.w / DOTS_PER_MM * 10) / 10,
+               mmH: Math.round(cache.h / DOTS_PER_MM * 10) / 10 };
+    }
+    prepare(settings);
+    return null;
   }
 
   /* Synchronous read — used while rendering the invoice. */
@@ -259,10 +308,13 @@ window.THERMAL = (function () {
   return {
     prepare: prepare,
     cached: cached,
+    info: info,
     prime: prime,
     clearCache: clearCache,
     targetDots: targetDots,
     targetMm: targetMm,
+    maxHeightDots: maxHeightDots,
+    maxHeightMm: function (settings) { return Math.round(maxHeightDots(settings) / DOTS_PER_MM); },
     paperFor: paperFor,
     PAPER: PAPER
   };

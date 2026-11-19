@@ -284,7 +284,7 @@ async function printElement(elementOrSelector, options) {
   } else {
     el = elementOrSelector;
   }
-  if (!el) { alert('Print content not found'); return; }
+  if (!el) { alert('Print content not found'); return false; }
 
   // Clone the element to manipulate safely
   const clone = el.cloneNode(true);
@@ -303,6 +303,27 @@ async function printElement(elementOrSelector, options) {
       } catch(e) {}
     }
   });
+
+  // Step 2b-pre: thermal logo must be READY before printing.
+  // The processed 1-bit bitmap is built asynchronously; if it is not cached yet
+  // the receipt would print the raw colour logo (grey, oversized, washed out).
+  if (options.awaitThermal !== false && typeof THERMAL !== 'undefined') {
+    try { await THERMAL.prepare(); } catch (e) {}
+  }
+
+  // Refresh every thermal logo in the clone with the freshly processed bitmap.
+  try {
+    const st = (typeof DB !== 'undefined' && DB.settings) ? DB.settings() : {};
+    const tin = (typeof THERMAL !== 'undefined') ? THERMAL.info(st) : null;
+    if (tin && st.invoiceLogoMono !== false) {
+      clone.querySelectorAll('img.inv-logo').forEach(img => {
+        img.setAttribute('src', tin.dataUrl);
+        img.setAttribute('style',
+          'width:' + tin.mm + 'mm;max-width:' + tin.mm + 'mm;height:auto;max-height:' +
+          tin.mmH + 'mm;object-fit:contain;background:#fff;padding:0;image-rendering:pixelated;display:block;margin:0 auto;');
+      });
+    }
+  } catch (e) {}
 
   // Step 2: Convert all <img> src to absolute URLs OR data URLs
   const images = clone.querySelectorAll('img');
@@ -343,27 +364,58 @@ async function printElement(elementOrSelector, options) {
   // Step 3: Get HTML with all images inlined
   const html = clone.outerHTML;
 
-  // Step 4: Inline ALL stylesheets
-  let styleText = '';
-  for (const sheet of document.styleSheets) {
-    try {
-      for (const rule of sheet.cssRules) {
-        styleText += rule.cssText + '\n';
-      }
-    } catch(e) {
-      // External stylesheet — fetch it
-      if (sheet.href) {
-        try {
-          const r = await fetch(sheet.href);
-          if (r.ok) styleText += await r.text() + '\n';
-        } catch(e) {}
+  // Step 4: Inline the stylesheets — but ONLY the parts that apply to paper.
+  //
+  // Why: the app's own stylesheet contains
+  //     @media print { body * { visibility: hidden }  #printArea, #printArea * { visibility: visible } }
+  // which is right for printing the live screen, but this window prints a
+  // DETACHED slip. Copying that rule here made every detached slip (partial
+  // delivery, payment receipt, challan, PO, claim…) invisible on paper and in
+  // "Save as PDF" — the print preview on screen looked fine, the PDF was blank.
+  // So: keep everything outside @media blocks + all @media print blocks, and
+  // drop @media screen blocks (app-shell cosmetics, never printed).
+  const MEDIA_RULE = (typeof CSSRule !== 'undefined' && CSSRule.MEDIA_RULE) || 4;
+  const SUPPORTS_RULE = (typeof CSSRule !== 'undefined' && CSSRule.SUPPORTS_RULE) || 12;
+  const keepForPrint = (rules, out) => {
+    for (const rule of rules) {
+      if (rule.type === MEDIA_RULE) {
+        const mt = (rule.conditionText || rule.media && rule.media.mediaText || '').toLowerCase();
+        if (mt.indexOf('print') !== -1) out.push(rule.cssText);
+        else if (rule.cssRules && rule.cssRules.length) keepForPrint(rule.cssRules, out);
+      } else if (rule.type === SUPPORTS_RULE) {
+        if (rule.cssRules) keepForPrint(rule.cssRules, out);
+      } else {
+        out.push(rule.cssText);
       }
     }
-  }
+  };
+  let styleText = '';
+  try {
+    const acc = [];
+    for (const sheet of document.styleSheets) {
+      try {
+        keepForPrint(sheet.cssRules, acc);
+      } catch(e) {
+        // External stylesheet — fetch it
+        if (sheet.href) {
+          try {
+            const r = await fetch(sheet.href);
+            if (r.ok) {
+              const text = await r.text();
+              // strip @media screen blocks, keep the rest
+              acc.push(text.replace(/@media[^{]*screen[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/gi,
+                m => (/@media[^{]*print/i.test(m) ? m : '')));
+            }
+          } catch(e) {}
+        }
+      }
+    }
+    styleText = acc.join('\n');
+  } catch (e) { styleText = ''; }
 
   // Step 5: Open print window with everything pre-loaded
   const win = window.open('', '_blank', 'width=420,height=700');
-  if (!win) { alert('Please allow popups for printing!'); return; }
+  if (!win) { alert('Please allow popups for printing!'); return false; }
 
   const printDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>${options.title || 'Print'}</title>
@@ -375,7 +427,13 @@ html, body {
   margin: 0 !important; padding: 0 !important;
   background: #fff !important; color: #000 !important;
   font-family: Arial, 'Helvetica Neue', sans-serif !important;
+  visibility: visible !important;
 }
+/* This window prints ONE detached slip — never let an inherited
+   "hide everything except #printArea" rule blank the paper. */
+#printArea, #printArea * { visibility: visible !important; }
+/* Controls / buttons that must never reach paper */
+.no-print, .no-print *, .modal-footer, .modal-header .btn { display: none !important; }
 .no-print, .modal-backdrop, .modal-footer, .modal > div:first-child[class*="no-print"] { display: none !important; }
 .invoice-page {
   display: block !important;
@@ -414,6 +472,17 @@ img {
   max-width: 100%;
   display: inline-block;
   visibility: visible !important;
+  /* Printers must not stretch a bitmap beyond its real pixel width, otherwise
+     a ~400-dot logo gets blown up to 576 dots and turns into a blurry block. */
+  image-rendering: -webkit-optimize-contrast;
+  -ms-interpolation-mode: nearest-neighbor;
+}
+/* Thermal brand logo: physical size in mm, never wider than the paper */
+.inv-logo {
+  max-width: 100% !important;
+  height: auto !important;
+  margin: 0 auto !important;
+  display: block !important;
 }
 table { width: 100%; border-collapse: collapse; }
 .print-slip {
@@ -427,18 +496,40 @@ table { width: 100%; border-collapse: collapse; }
 .print-page-break { page-break-after: always; break-after: page; height: 0; }
 @media print {
   @page { size: ${paper}mm auto; margin: ${marginMm}mm; }
-  html, body { width: ${paper === '58' ? '58mm' : '80mm'} !important; }
+  /* "Save as PDF" on an 80mm roll used to open a full A4 page with the slip
+     squeezed into one corner. A fixed, roll-sized page keeps the PDF identical
+     to the printed receipt. */
+  html { width: 100%; }
+  html, body {
+    width: ${paper === '58' ? '58mm' : '80mm'} !important;
+    max-width: ${paper === '58' ? '58mm' : '80mm'} !important;
+  }
   body { padding: 0 !important; background: #fff !important; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  .invoice-page { padding: 0 !important; }
+  .invoice-page {
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    /* never let the browser shrink-to-fit the receipt — that is what makes
+       thermal text come out tiny or the logo oversized */
+    transform: none !important;
+    zoom: 1 !important;
+  }
+  .inv-logo-wrap, .inv-logo { page-break-inside: avoid !important; }
+  /* small counter slips (partial delivery, payment receipt) keep a receipt shape
+     even when the PDF paper is A4 — never a stretched, half-empty page */
+  .inv-slip { max-width: 88mm !important; margin: 0 auto !important; }
 }
 @media screen {
   body { padding: 20px; background: #f0f4ff; }
   .invoice-page { box-shadow: 0 4px 12px rgba(0,0,0,.1); border-radius: 8px; max-width: 380px; }
+  /* slips that were built with their own width keep it in the preview */
+  .invoice-page[style*="width"] { max-width: 100%; }
 }
 </style>
 </head><body>
-${html}
+<div id="printArea">${html}</div>
 <script>
   // Wait for all images to load before printing
   function doPrint() {
@@ -468,6 +559,7 @@ ${html}
   win.document.open();
   win.document.write(printDoc);
   win.document.close();
+  return true;
 }
 
 
@@ -556,6 +648,54 @@ function openEmojiPicker(onPick) {
 window.openEmojiPicker = openEmojiPicker;
 
 /* ============================================================
+   EASY NUMBER INPUT — click par poora value select, seedha type
+   Cashier ko pehle 0 delete karne ki zaroorat nahi parti.
+   window.easyNumber(input, { min, max, onChange })
+   min/max function bhi ho sakte hain (live settings ke liye).
+   ============================================================ */
+function easyNumber(el, opts = {}) {
+  if (!el) return;
+  const { digits = 0, onChange = () => {} } = opts;
+  const lim = () => {
+    const mn = typeof opts.min === 'function' ? opts.min() : (opts.min == null ? 0 : opts.min);
+    const mx = typeof opts.max === 'function' ? opts.max() : (opts.max == null ? Infinity : opts.max);
+    return { mn: Math.max(0, mn), mx: Math.max(mn, mx) };
+  };
+  const clamp = (v) => {
+    const { mn, mx } = lim();
+    let n = parseFloat(String(v).replace(/[^\d.]/g, ''));
+    if (!isFinite(n)) n = 0;
+    return Math.min(mx, Math.max(mn, digits ? +n.toFixed(digits) : n));
+  };
+  let justFocused = false;
+  el.addEventListener('focus', () => {
+    try { el.select(); } catch (e) {}
+    justFocused = true;
+    setTimeout(() => { justFocused = false; }, 400);
+  });
+  el.addEventListener('mouseup', (e) => {
+    if (justFocused) { e.preventDefault(); try { el.select(); } catch (err) {} }
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      el.value = clamp((parseFloat(el.value) || 0) + (e.key === 'ArrowUp' ? 1 : -1));
+      onChange(clamp(el.value));
+    } else if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+  });
+  el.addEventListener('input', () => {
+    const v = clamp(el.value);
+    if (parseFloat(el.value) > lim().mx) el.value = v;
+    onChange(v);
+  });
+  el.addEventListener('blur', () => {
+    if (el.value !== '') el.value = clamp(el.value);
+    onChange(clamp(el.value));
+  });
+}
+window.easyNumber = easyNumber;
+
+/* ============================================================
    Auto Status Logic (Pending -> Washing at 5 PM)
    ============================================================ */
 function getCalculatedStatus(order) {
@@ -609,30 +749,63 @@ if (typeof window !== 'undefined') {
   setInterval(autoUpdateWashingStatus, 5 * 60 * 1000);
 }
 
-function promptPasswordModal(title, callback) {
+/* Ask for the IT-Admin password and hand back TRUE/FALSE.
+   The password itself is never compared here — it is checked against a
+   PBKDF2 verifier (MDC_CODE_VAULT), so the value is not readable in storage. */
+function promptPasswordModal(title, onVerified) {
   openModal(`
     <h3>${escapeHtml(title)}</h3>
     <div class="field">
       <label>IT ADMIN Password</label>
-      <input type="password" id="itAdminPwd" placeholder="Enter password..."/>
+      <input type="password" id="itAdminPwd" placeholder="Enter password..." autocomplete="off"/>
+      <small style="color:var(--text-soft);">Protected — stored as a one-way hash, never as text.</small>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="itAdminSubmit">Submit</button>
+      <button class="btn btn-primary" id="itAdminSubmit">Unlock</button>
     </div>
   `, {
     onOpen(m) {
       const inp = m.querySelector('#itAdminPwd');
       const btn = m.querySelector('#itAdminSubmit');
       inp.focus();
-      inp.addEventListener('keyup', (e) => { if (e.key === 'Enter') btn.click(); });
-      btn.onclick = () => {
+      const submit = async () => {
         const val = inp.value;
+        if (!val) return;
+        btn.disabled = true; btn.textContent = 'Checking…';
+        const ok = (typeof verifyITAdminPassword === 'function')
+          ? await verifyITAdminPassword(val)
+          : false;
+        btn.disabled = false; btn.textContent = 'Unlock';
+        if (!ok) { toast('Incorrect IT ADMIN Password!', 'error'); inp.select(); return; }
         closeModal();
-        callback(val);
+        if (typeof onVerified === 'function') onVerified(true);
       };
+      inp.addEventListener('keyup', (e) => { if (e.key === 'Enter') submit(); });
+      btn.onclick = submit;
     }
   });
+}
+
+/* IT-Admin unlock: hashed verifier first, build-time seed as a one-time bootstrap. */
+async function verifyITAdminPassword(pwd) {
+  if (!pwd) return false;
+  try {
+    if (window.MDC_CODE_VAULT) {
+      if (await MDC_CODE_VAULT.has('itadmin') && await MDC_CODE_VAULT.check('itadmin', pwd)) return true;
+      // first run on this profile (or a fresh build) → bootstrap from the seed
+      const seed = (window._IT_BRAND && typeof window._IT_BRAND.seedPassword === 'function')
+        ? window._IT_BRAND.seedPassword() : '';
+      if (seed && pwd === seed) {
+        await MDC_CODE_VAULT.set('itadmin', pwd);
+        return true;
+      }
+      return false;
+    }
+    const legacy = (window._IT_BRAND && typeof window._IT_BRAND.seedPassword === 'function')
+      ? window._IT_BRAND.seedPassword() : '';
+    return !!legacy && pwd === legacy;
+  } catch (e) { return false; }
 }
 
 function isAppExpired() {

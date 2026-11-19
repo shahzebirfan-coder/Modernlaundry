@@ -140,7 +140,8 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 /* TRIAL & SUBSCRIPTION MANAGEMENT */
-const IT_ADMIN_PASSWORD = window._IT_BRAND.pwd;
+// IT-Admin password is verified through the hashed vault (see utils.js)
+const IT_ADMIN_PASSWORD = null;
 
 function initTrialCheck() {
   let s = DB.settings();

@@ -14,6 +14,7 @@ function renderOrders() {
           <option value="all">${t('ord.allStatus')}</option>
           <option value="pending">⏳ ${t('status.pending')}</option>
           <option value="washing">🌀 ${t('status.washing')}</option>
+          <option value="ironing">🧺 ${t('status.ironing', 'Press (Ironing)')}</option>
           <option value="ready">✅ ${t('status.ready')}</option>
           <option value="delivered">📦 ${t('status.delivered')}</option>
           <option value="cancelled">❌ ${t('status.cancelled')}</option>
@@ -117,15 +118,20 @@ function renderOrdersBody() {
 
   $('#ordersBody').innerHTML = filtered.map(o => {
     const c = DB.get('customers', o.customerId) || { name: 'Walk-in' };
-    const invNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#' + o.id.slice(-6).toUpperCase();
+    const invNo = DB.invoiceLabel(o);
     return `<tr>
       <td><b>${escapeHtml(invNo)}</b>${o.isCredit?`<br><span class="badge due">CREDIT</span>`:''}${o.paymentType==='advance'?`<br><span class="badge" style="background:#dcfce7;color:#065f46;">🟢 ADVANCE</span>`:''}</td>
       <td><b>${escapeHtml(c.name)}</b><br><small style="color:var(--text-soft);">${escapeHtml(c.phone||'')}</small></td>
       <td>${o.items.length} items<br><b style='color:var(--primary);'>${o.items.reduce((s,i)=>s+(i.qty||0),0)} pcs</b>${o.deliveryType?` <span class='badge' style='background:#f3f4f6;color:#374151;'>${o.deliveryType==='hanger'?'🧥':o.deliveryType==='fold'?'📦':'🧺'} ${o.deliveryType}</span>`:''}</td>
       <td><b>${fmtMoney(o.total)}</b></td>
-      <td>${fmtMoney(o.paid)} ${o.due>0?`<br><span class="badge due">Due ${fmtMoney(o.due)}</span>`:`<br><span class="badge paid">Paid</span>`}</td>
       <td>
-        <span class="badge ${o.status}">${o.status}</span>
+        ${o.due>0
+          ? `<span class="badge due">${(o.paid||0) > 0 ? 'Due ' + fmtMoney(o.due) : 'UNPAID'}</span>
+             <br><small style="color:var(--text-soft);">Paid: ${fmtMoney(o.paid||0)}</small>`
+          : `<span style="color:var(--success);font-weight:700;">${fmtMoney(o.paid||0)}</span><br><span class="badge paid">Paid ✅</span>`}
+      </td>
+      <td>
+        <span class="badge ${o.status}">${statusBadgeLabel(o.status)}</span>
         ${(o.status === 'ready' && o.location) ? `<br><span style="font-size:10px;font-weight:700;color:#000;background:#fef08a;padding:2px 6px;border-radius:6px;border:1px solid #f59e0b;margin-top:4px;display:inline-block;">📍 ${escapeHtml(o.location)}</span>` : ''}
       </td>
       <td>${fmtDateShort(o.createdAt)}</td>
@@ -160,6 +166,7 @@ function renderOrdersBody() {
           const orderToDel = DB.get('orders', id);
           if (orderToDel && typeof restoreInventory === 'function') restoreInventory(orderToDel);
           DB.remove('orders', id);
+          if (typeof DB.reclaimInvoiceNo === 'function') DB.reclaimInvoiceNo(orderToDel && orderToDel.invoiceNo);
           renderOrdersBody();
         });
       } else {
@@ -167,11 +174,19 @@ function renderOrdersBody() {
           if (typeof logAction === 'function') logAction('order.delete', `Order ${id.slice(-6)}`);
           const orderToDel = DB.get('orders', id);
           if (orderToDel && typeof restoreInventory === 'function') restoreInventory(orderToDel);
-          DB.remove('orders', id); toast('Deleted','success'); renderOrdersBody();
+          DB.remove('orders', id);
+          if (typeof DB.reclaimInvoiceNo === 'function') DB.reclaimInvoiceNo(orderToDel && orderToDel.invoiceNo);
+          toast('Deleted','success'); renderOrdersBody();
         });
       }
     }
   });
+}
+
+/* Status ka insaani naam — "ironing" ke bajaye "Press" */
+function statusBadgeLabel(status) {
+  const map = { pending: 'Pending', washing: 'Washing', ironing: 'Press', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled', partial: 'Partial' };
+  return map[status] || status;
 }
 
 function openStatusChange(orderId) {
@@ -179,7 +194,7 @@ function openStatusChange(orderId) {
   if (!o) return;
   const c = DB.get('customers', o.customerId) || {};
   const html = `
-    <h3>🔄 Update Order — INV-${o.invoiceNo || o.id.slice(-6).toUpperCase()}</h3>
+    <h3>🔄 Update Order — ${DB.invoiceLabel(o)}</h3>
     <p class="sub">Customer: ${escapeHtml(c.name)} • ${escapeHtml(c.phone||'')}</p>
     <div class="form-row cols-1">
       <div class="field">
@@ -187,6 +202,7 @@ function openStatusChange(orderId) {
         <select id="newStatus">
           <option value="pending"   ${o.status==='pending'?'selected':''}>⏳ Pending</option>
           <option value="washing"   ${o.status==='washing'?'selected':''}>🌀 Washing</option>
+          <option value="ironing"   ${o.status==='ironing'?'selected':''}>🧺 Press (Ironing)</option>
           <option value="ready"     ${o.status==='ready'?'selected':''}>✅ Ready for Pickup</option>
           <option value="delivered" ${o.status==='delivered'?'selected':''}>📦 Delivered</option>
           <option value="cancelled" ${o.status==='cancelled'?'selected':''}>❌ Cancelled</option>
@@ -197,12 +213,36 @@ function openStatusChange(orderId) {
         <input type="text" id="newRack" placeholder="e.g. Rack A1, Shelf 3" value="${escapeHtml(o.location||'')}"/>
         <small style="color:var(--text-soft);">Helps you find clothes instantly when customer arrives.</small>
       </div>
+      <div class="field" id="pressHint" style="display:${o.status==='ironing'?'block':'none'};background:#fff7ed;border-left:4px solid #f59e0b;border-radius:8px;padding:8px 10px;font-size:12px;color:#92400e;font-weight:600;">
+        🧺 Press = kapre dhul chuke, istri ho rahi hai. Customer ko WhatsApp par update chala jayega aur portal par bhi yahi status nazar aayega.
+      </div>
       <div class="field">
-        <label>Receive Additional Payment</label>
-        <input type="number" id="addPay" value="${o.due}" min="0" max="${o.due}"/>
+        <label>Receive Additional Payment <span style="font-weight:400;font-size:11px;color:var(--text-soft);">(optional — sirf tab likhein jab paisa wasool hua ho)</span></label>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="addPay" value="" placeholder="0"
+               autocomplete="off" style="font-size:16px;font-weight:700;text-align:right;background:var(--surface);"/>
         <small style="color:var(--text-soft);">Current Paid: <b>${fmtMoney(o.paid)}</b> • Remaining Due: <b style="color:var(--danger);">${fmtMoney(o.due)}</b></small>
+        ${o.due > 0 ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary btn-sm" data-addpay="0">Kuch Nahi (0)</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-addpay="${o.due}">Poora ${fmtMoney(o.due)}</button>
+        </div>` : ''}
+        <small style="display:block;margin-top:6px;color:#92400e;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:6px;padding:6px 8px;">
+          ⚠️ Status badalne se payment khud nahi lagti. Khali chhod dein to Due waise hi rahega.
+        </small>
       </div>
     </div>
+    ${(Array.isArray(o.paymentsLog) && o.paymentsLog.length) ? `
+    <details style="margin-bottom:12px;background:var(--surface-alt);border-radius:8px;padding:8px 10px;">
+      <summary style="cursor:pointer;font-size:12px;font-weight:700;">📜 Payment History (${o.paymentsLog.length})</summary>
+      <table style="width:100%;font-size:11.5px;margin-top:6px;border-collapse:collapse;">
+        ${o.paymentsLog.slice().reverse().map(pp => `
+          <tr style="border-bottom:1px dotted var(--border);">
+            <td style="padding:3px 0;">${new Date(pp.at).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</td>
+            <td style="padding:3px 0;">${escapeHtml(pp.method || 'cash')}</td>
+            <td style="padding:3px 0;text-align:right;font-weight:700;">${fmtMoney(pp.amount)}</td>
+          </tr>`).join('')}
+      </table>
+    </details>` : ''}
+
     <div class="modal-footer">
       <button class="btn btn-ghost" id="cancelBtn">Cancel</button>
       <button class="btn btn-primary" id="saveBtn">💾 Save</button>
@@ -211,23 +251,63 @@ function openStatusChange(orderId) {
   openModal(html, { onOpen(m){
     $('#newStatus', m).onchange = (e) => {
       $('#rackField', m).style.display = e.target.value === 'ready' ? 'block' : 'none';
+      if ($('#pressHint', m)) $('#pressHint', m).style.display = e.target.value === 'ironing' ? 'block' : 'none';
       if (e.target.value === 'ready') setTimeout(()=>$('#newRack', m).focus(), 100);
     };
+    /* quick "0 / poora" buttons */
+    if (window.easyNumber) window.easyNumber($('#addPay', m), { min: 0, max: () => Math.max(0, o.due) });
+    $$('[data-addpay]', m).forEach(b => b.onclick = () => {
+      $('#addPay', m).value = (+b.dataset.addpay || 0) || '';
+      try { $('#addPay', m).focus(); } catch (e) {}
+    });
+
     $('#cancelBtn', m).onclick = closeModal;
     $('#saveBtn', m).onclick = () => {
       const newStatus = $('#newStatus', m).value;
-      const addPay = Math.max(0, +$('#addPay', m).value || 0);
+      // KHALI / 0 = koi payment nahi. Sirf tab paisa lagta hai jab cashier ne khud likha ho.
+      const rawPay = String($('#addPay', m).value || '').trim();
+      const addPay = rawPay === '' ? 0 : Math.max(0, Math.min(o.due, +rawPay || 0));
       const paid = Math.min(o.total, o.paid + addPay);
-      const due = o.total - paid;
+      const due = Math.max(0, o.total - paid);
       const oldStatus = o.status;
-      const patch = { status: newStatus, paid, due, isCredit: due > 0 };
-      if (newStatus === 'ready') patch.location = $('#newRack', m).value.trim();
-      
-      DB.update('orders', orderId, patch);
-      if (typeof maybePromptWhatsAppOnStatus === 'function' && oldStatus !== newStatus && !sessionStorage.getItem('mrLaundryWaPause')) {
-        setTimeout(() => maybePromptWhatsAppOnStatus(orderId, newStatus, oldStatus), 300);
+
+      const apply = () => {
+        const patch = { status: newStatus, paid, due, isCredit: due > 0 };
+        if (newStatus === 'ready') patch.location = $('#newRack', m).value.trim();
+        if (addPay > 0) {
+          const paymentsLog = Array.isArray(o.paymentsLog) ? [...o.paymentsLog] : [];
+          paymentsLog.push({
+            id: 'pay_' + Date.now().toString(36) + Math.floor(Math.random() * 1000),
+            amount: addPay, method: 'cash', note: 'Status update ke sath',
+            by: DB.currentUser()?.username || 'unknown',
+            byName: DB.currentUser()?.name || '',
+            at: new Date().toISOString()
+          });
+          patch.paymentsLog = paymentsLog;
+        }
+        DB.update('orders', orderId, patch);
+        if (typeof logAction === 'function') {
+          logAction('order.status', `${DB.invoiceLabel(o)}: ${oldStatus} → ${newStatus}${addPay > 0 ? ` (+${fmtMoney(addPay)} received)` : ''}`);
+        }
+        if (typeof maybePromptWhatsAppOnStatus === 'function' && oldStatus !== newStatus && !sessionStorage.getItem('mrLaundryWaPause')) {
+          setTimeout(() => maybePromptWhatsAppOnStatus(orderId, newStatus, oldStatus), 300);
+        }
+        closeModal();
+        toast(addPay > 0 ? `Order updated • ${fmtMoney(addPay)} received` : 'Order updated — koi payment nahi lagi', 'success');
+        renderOrdersBody();
+      };
+
+      // Ready / Delivered par paisa nahi mila → ek dafa yaad dila dein (force nahi)
+      if (addPay === 0 && ['ready', 'delivered'].includes(newStatus) && o.due > 0) {
+        confirmDialog(`Order "${newStatus === 'ready' ? 'Ready' : 'Delivered'}" ho raha hai lekin abhi tak ${fmtMoney(o.due)} due hai.\n\nTheek hai? (Order due ke sath hi save hoga — payment baad mein bhi le sakte hain.)`, apply);
+        return;
       }
-      closeModal(); toast('Order updated','success'); renderOrdersBody();
+      // paisa likha gaya ho to ek dafa confirm — jaldi jaldi mein ghalti na ho
+      if (addPay > 0) {
+        confirmDialog(`Rs. ${(+addPay).toLocaleString()} wasool hua hai?\n\nYe amount customer ke Paid mein add ho jayega (Due ${fmtMoney(o.due)} → ${fmtMoney(due)}).\n\nAgar paisa nahi mila to Cancel karein aur box khali chhod dein.`, apply);
+      } else {
+        apply();
+      }
     };
   }});
 }
@@ -250,7 +330,7 @@ function openEditInvoice(orderId) {
   `).join('');
 
   const html = `
-    <h3>✏️ Edit Invoice — INV-${o.invoiceNo || o.id.slice(-6).toUpperCase()}</h3>
+    <h3>✏️ Edit Invoice — ${DB.invoiceLabel(o)}</h3>
     <p class="sub">⚠️ Admin-only. Changes are logged with your username.</p>
 
     <div style="padding:10px;background:var(--surface-alt);border-radius:8px;margin-bottom:14px;font-size:13px;">
@@ -274,18 +354,22 @@ function openEditInvoice(orderId) {
       </div>
       <div class="field">
         <label>Discount Value</label>
-        <input type="number" id="eDiscVal" value="${o.discountValue||0}" min="0"/>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="eDiscVal" value="${o.discountValue||0}" autocomplete="off" style="text-align:right;font-weight:700;"/>
       </div>
     </div>
     <div class="form-row">
       <div class="field">
+        <label>🚚 ${escapeHtml(DB.deliveryChargeLabel())} <span style="font-weight:400;font-size:11px;color:var(--text-soft);">(after discount)</span></label>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="eDelCharge" value="${(o.deliveryCharge != null ? o.deliveryCharge : (o.deliveryFee || 0))}" autocomplete="off" style="text-align:right;font-weight:700;"/>
+      </div>
+      <div class="field">
         <label>Paid Amount</label>
-        <input type="number" id="ePaid" value="${o.paid}" min="0"/>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="ePaid" value="${o.paid}" autocomplete="off" style="text-align:right;font-weight:700;"/>
       </div>
       <div class="field">
         <label>Status</label>
         <select id="eStatus">
-          ${['pending','washing','ready','delivered','cancelled'].map(s=>`<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}
+          ${['pending','washing','ironing','ready','delivered','cancelled'].map(s=>`<option value="${s}" ${o.status===s?'selected':''}>${s === 'ironing' ? 'Press (Ironing)' : s}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -311,6 +395,7 @@ function openEditInvoice(orderId) {
   `;
   openModal(html, { large: true, onOpen(m) {
     const calcAndShow = () => {
+      if (!m || !m.querySelectorAll) return;
       const rows = $$('#editItems tr', m);
       let subtotal = 0;
       rows.forEach(tr => {
@@ -323,12 +408,14 @@ function openEditInvoice(orderId) {
       const discType = $('#eDiscType', m).value;
       const discVal = +$('#eDiscVal', m).value || 0;
       const disc = discType === 'percent' ? Math.round(subtotal * discVal / 100) : discVal;
-      const total = Math.max(0, subtotal - disc);
+      const delCh = Math.max(0, Math.round(+($('#eDelCharge', m) ? $('#eDelCharge', m).value : 0) || 0));
+      const total = Math.max(0, subtotal - disc) + delCh;   // delivery charge is added AFTER the discount
       const paid = Math.min(total, +$('#ePaid', m).value || 0);
       const due = total - paid;
       $('#eTotals', m).innerHTML = `
         Subtotal: ${fmtMoney(subtotal)} •
         Discount: − ${fmtMoney(disc)} •
+        ${delCh > 0 ? `🚚 ${escapeHtml(DB.deliveryChargeLabel())}: + ${fmtMoney(delCh)} • ` : ''}
         <b>Total: ${fmtMoney(total)}</b> •
         Paid: ${fmtMoney(paid)} •
         ${due>0?`<span style="color:var(--danger);">Due: ${fmtMoney(due)}</span>`:'<span style="color:var(--success);">Paid in Full ✅</span>'}
@@ -336,7 +423,13 @@ function openEditInvoice(orderId) {
     };
 
     const bindRow = (tr) => {
-      tr.querySelectorAll('input').forEach(i => i.oninput = calcAndShow);
+      tr.querySelectorAll('input').forEach(i => {
+        i.oninput = calcAndShow;
+        const fld = i.dataset.fld;
+        if (window.easyNumber && (fld === 'price' || fld === 'qty')) {
+          window.easyNumber(i, { min: fld === 'qty' ? 1 : 0, onChange: () => calcAndShow() });
+        }
+      });
       const rm = tr.querySelector('[data-rm]'); if (rm) rm.onclick = () => { tr.remove(); calcAndShow(); };
     };
     $$('#editItems tr', m).forEach(bindRow);
@@ -347,8 +440,8 @@ function openEditInvoice(orderId) {
       tr.dataset.i = i;
       tr.innerHTML = `
         <td><input type="text" value="Custom Item" data-fld="name" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;"/></td>
-        <td><input type="number" value="100" min="0" data-fld="price" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:6px;"/></td>
-        <td><input type="number" value="1" min="1" data-fld="qty" style="width:70px;padding:6px;border:1px solid var(--border);border-radius:6px;"/></td>
+        <td><input type="text" inputmode="numeric" value="100" data-fld="price" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:6px;text-align:right;"/></td>
+        <td><input type="text" inputmode="numeric" value="1" data-fld="qty" style="width:70px;padding:6px;border:1px solid var(--border);border-radius:6px;text-align:right;"/></td>
         <td class="line-total"><b>${fmtMoney(100)}</b></td>
         <td><button class="btn btn-danger btn-sm" data-rm="${i}">🗑️</button></td>
       `;
@@ -357,7 +450,17 @@ function openEditInvoice(orderId) {
       calcAndShow();
     };
 
-    [$('#eDiscType', m), $('#eDiscVal', m), $('#ePaid', m)].forEach(el => el.oninput = calcAndShow);
+    [$('#eDiscType', m), $('#eDiscVal', m), $('#ePaid', m)];
+    // discount value: seedha type karein (click par select), percent mode mein 0-100
+    if (window.easyNumber) {
+      window.easyNumber($('#eDiscVal', m), {
+        min: 0,
+        max: () => ($('#eDiscType', m).value === 'percent' ? 100 : Infinity),
+        onChange: () => calcAndShow()
+      });
+      window.easyNumber($('#eDelCharge', m), { min: 0, onChange: () => calcAndShow() });
+      window.easyNumber($('#ePaid', m), { min: 0, onChange: () => calcAndShow() });
+    }
     $('#eDiscType', m).onchange = calcAndShow;
     calcAndShow();
 
@@ -376,17 +479,19 @@ function openEditInvoice(orderId) {
       const discType = $('#eDiscType', m).value;
       const discVal = +$('#eDiscVal', m).value || 0;
       const disc = discType === 'percent' ? Math.round(subtotal * discVal / 100) : Math.min(subtotal, discVal);
-      const total = Math.max(0, subtotal - disc);
+      const delCharge = Math.max(0, Math.round(+$('#eDelCharge', m).value || 0));
+      const total = Math.max(0, subtotal - disc) + delCharge;   // charge after discount
       const paid = Math.min(total, +$('#ePaid', m).value || 0);
       const due = total - paid;
 
       const editLog = o.editLog || [];
       editLog.push({ by: DB.currentUser().username, at: new Date().toISOString() });
 
-      if (typeof logAction === 'function') logAction('order.edit', `INV-${o.invoiceNo||orderId.slice(-6)}: items changed`);
+      if (typeof logAction === 'function') logAction('order.edit', `${DB.invoiceLabel(o)}: items changed`);
       const _oldStatus = o.status;
       DB.update('orders', orderId, {
         items, subtotal, discountType: discType, discountValue: discVal,
+        deliveryCharge: delCharge,
         discount: disc, manualDiscount: disc, loyaltyDiscount: 0, loyaltyPercent: 0,
         tax: 0, total, paid, due, isCredit: due > 0,
         status: $('#eStatus', m).value,
@@ -418,7 +523,7 @@ function openReceivePayment(orderId) {
   if ((o.due || 0) <= 0) { toast(t('rcv.noDue') + ' ✅', 'success'); return; }
 
   const c = DB.get('customers', o.customerId) || { name: 'Walk-in', phone: '' };
-  const invNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#' + o.id.slice(-6).toUpperCase();
+  const invNo = DB.invoiceLabel(o);
   const s = DB.settings();
 
   const html = `
@@ -435,8 +540,9 @@ function openReceivePayment(orderId) {
     <div class="form-row cols-2">
       <div class="field">
         <label>💵 ${t('rcv.amountNow')}</label>
-        <input type="number" id="rcvAmt" value="${o.due}" min="0" max="${o.due}" style="font-size:18px;font-weight:700;"/>
-        <small style="color:var(--text-soft);">Max: ${fmtMoney(o.due)}</small>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="rcvAmt" value="" placeholder="0"
+               autocomplete="off" style="font-size:18px;font-weight:700;text-align:right;"/>
+        <small style="color:var(--text-soft);">Max: ${fmtMoney(o.due)} — pehle amount likhein, phir Save dabayein</small>
         <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
           <button type="button" class="btn btn-secondary btn-sm" data-quick="full">${t('rcv.full')} ${fmtMoney(o.due)}</button>
           <button type="button" class="btn btn-secondary btn-sm" data-quick="half">${t('rcv.half')} ${fmtMoney(Math.round(o.due/2))}</button>
@@ -484,14 +590,17 @@ function openReceivePayment(orderId) {
   `;
 
   openModal(html, { large: true, onOpen(m) {
+    if (window.easyNumber) window.easyNumber($('#rcvAmt', m), { min: 0, max: () => Math.max(0, o.due) });
     $$('[data-quick]', m).forEach(b => b.onclick = () => {
       const v = b.dataset.quick;
       $('#rcvAmt', m).value = v === 'full' ? o.due : Math.round(o.due/2);
+      try { $('#rcvAmt', m).focus(); } catch (e) {}
     });
 
     $('#rcvSave', m).onclick = () => {
-      const amt = Math.max(0, Math.min(o.due, +$('#rcvAmt', m).value || 0));
-      if (amt <= 0) { toast('Enter a valid amount', 'error'); return; }
+      const raw = String($('#rcvAmt', m).value || '').trim();
+      const amt = Math.max(0, Math.min(o.due, +raw || 0));
+      if (raw === '' || amt <= 0) { toast('Pehle amount likhein — khali box se payment save nahi hoti', 'error'); return; }
 
       const method = $('#rcvMethod', m).value;
       const note = $('#rcvNote', m).value.trim();
@@ -558,7 +667,7 @@ function printPaymentReceipt(orderId, payRecord) {
   if (!o) return;
   const c = DB.get('customers', o.customerId) || { name: 'Walk-in', phone: '' };
   const s = DB.settings();
-  const invNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#' + o.id.slice(-6).toUpperCase();
+  const invNo = DB.invoiceLabel(o);
   const width = s.invoiceWidth || 360;
 
   const div = document.createElement('div');
@@ -567,7 +676,7 @@ function printPaymentReceipt(orderId, payRecord) {
   div.innerHTML = `
     <div style="text-align:center;border-bottom:2px dashed #000;padding-bottom:8px;margin-bottom:8px;">
       ${s.logoImage ? `<img src="${s.logoImage}" style="max-width:80px;max-height:60px;background:#000;padding:4px;border-radius:6px;"/>` : ''}
-      <div style="font-size:18px;font-weight:800;margin-top:6px;">${escapeHtml(s.shopName || 'Laundry POS')}</div>
+      <div style="font-size:18px;font-weight:800;margin-top:6px;">${escapeHtml(s.shopName || 'Modern Dry Cleaners')}</div>
       <div style="font-size:11px;">${escapeHtml(s.address || '')}</div>
       <div style="font-size:11px;">${escapeHtml(s.phone || '')}</div>
     </div>
@@ -583,6 +692,7 @@ function printPaymentReceipt(orderId, payRecord) {
     <div style="border-top:1px dashed #000;margin:8px 0;"></div>
     <table style="width:100%;font-size:13px;">
       <tr><td>Bill Total:</td><td style="text-align:right;">${fmtMoney(o.total)}</td></tr>
+      ${(+o.deliveryCharge || 0) > 0 ? `<tr><td style="font-size:11px;">↳ includes ${escapeHtml(o.deliveryChargeLabel || DB.deliveryChargeLabel())}</td><td style="text-align:right;font-size:11px;">+ ${fmtMoney(o.deliveryCharge)}</td></tr>` : ''}
       <tr><td>Previously Paid:</td><td style="text-align:right;">${fmtMoney(o.paid - payRecord.amount)}</td></tr>
       <tr style="font-size:16px;font-weight:800;background:#dcfce7;"><td style="padding:6px;">RECEIVED NOW:</td><td style="text-align:right;padding:6px;">${fmtMoney(payRecord.amount)}</td></tr>
       <tr><td>Method:</td><td style="text-align:right;text-transform:uppercase;"><b>${escapeHtml(payRecord.method)}</b></td></tr>
@@ -591,7 +701,7 @@ function printPaymentReceipt(orderId, payRecord) {
     </table>
     <div style="text-align:center;margin-top:10px;font-size:11px;border-top:2px dashed #000;padding-top:8px;">
       Thank you! 🙏<br>
-      ${escapeHtml(s.shopName || 'Laundry POS')}
+      ${escapeHtml(s.shopName || 'Modern Dry Cleaners')}
     </div>
   `;
   document.body.appendChild(div);
@@ -656,7 +766,7 @@ function openQuickPay() {
       return `<table class="tbl" style="margin-top:6px;"><thead><tr><th>Invoice</th><th>Customer</th><th>Total</th><th>Paid</th><th>Due</th><th>Status</th><th>Action</th></tr></thead><tbody>` +
         orders.map(o => {
           const c = DB.get('customers', o.customerId) || { name:'Walk-in', phone:'' };
-          const inv = o.invoiceNo ? `INV-${o.invoiceNo}` : '#'+o.id.slice(-6).toUpperCase();
+          const inv = DB.invoiceLabel(o);
           const due = o.due || 0;
           return `<tr>
             <td><b>${escapeHtml(inv)}</b></td>
@@ -665,7 +775,7 @@ function openQuickPay() {
             <td style="color:var(--success);">${fmtMoney(o.paid)}</td>
             <td style="color:${due>0?'var(--danger)':'var(--success)'};font-weight:700;">${fmtMoney(due)}</td>
             <td>
-        <span class="badge ${o.status}">${o.status}</span>
+        <span class="badge ${o.status}">${statusBadgeLabel(o.status)}</span>
         ${(o.status === 'ready' && o.location) ? `<br><span style="font-size:10px;font-weight:700;color:#000;background:#fef08a;padding:2px 6px;border-radius:6px;border:1px solid #f59e0b;margin-top:4px;display:inline-block;">📍 ${escapeHtml(o.location)}</span>` : ''}
       </td>
             <td>
@@ -713,7 +823,7 @@ function openPartialDelivery(orderId) {
   });
 
   const html = `
-    <h3>🛍️ Partial Delivery — INV-${o.invoiceNo || o.id.slice(-6).toUpperCase()}</h3>
+    <h3>🛍️ Partial Delivery — ${DB.invoiceLabel(o)}</h3>
     <p class="sub">Customer: ${escapeHtml(c.name)}</p>
     <div style="background:var(--surface-alt);padding:14px;border-radius:10px;margin-bottom:14px;">
       <p style="margin:0 0 10px 0;font-size:13px;color:var(--text-soft);">Enter the exact quantity being delivered or sent for free re-wash today.</p>
@@ -794,21 +904,28 @@ function openPartialDelivery(orderId) {
       closeModal(); toast('Partial delivery saved','success'); renderOrdersBody();
     };
 
-    $('#pdPrintBtn', m).onclick = () => {
+    $('#pdPrintBtn', m).onclick = async (ev) => {
       const patch = collectData();
       DB.update('orders', orderId, patch);
       closeModal();
-      printPartialSlip(orderId);
+      // print FIRST and wait for the print window, so a blocked popup is reported
+      const okPrint = await printPartialSlip(orderId);
+      if (!okPrint) toast('Slip saved, but the print window was blocked — allow pop-ups to print it', 'error');
       renderOrdersBody();
+      // also refresh the customer's portal view (status + item split)
+      if (typeof CLOUD !== 'undefined' && CLOUD.isEnabled && CLOUD.isEnabled()) {
+        try { CLOUD.pushNow && CLOUD.pushNow(); } catch (e) {}
+      }
+      if (ev && ev.currentTarget) ev.currentTarget.disabled = false;
     };
   }});
 }
 
-function printPartialSlip(orderId) {
+async function printPartialSlip(orderId) {
   const o = DB.get('orders', orderId);
   const c = DB.get('customers', o.customerId) || { name: 'Customer' };
   const s = DB.settings();
-  const invoiceNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#' + o.id.slice(-6).toUpperCase();
+  const invoiceNo = DB.invoiceLabel(o);
   
   const deliveredItems = [];
   const pendingItems = [];
@@ -825,13 +942,14 @@ function printPartialSlip(orderId) {
   });
 
   const html = `
-    <div style="font-family:sans-serif;width:280px;padding:10px;color:#000;">
+    <div class="invoice-page inv-slip" style="font-family:Arial,sans-serif;padding:6px;color:#000;">
       <h2 style="text-align:center;margin:0;font-size:20px;">${escapeHtml(s.shopName)}</h2>
       <div style="text-align:center;font-size:12px;font-weight:bold;margin:4px 0 10px;border-bottom:2px dashed #000;padding-bottom:4px;">
         PARTIAL DELIVERY SLIP
       </div>
+      ${(o.items || []).some(it => (it.deliveredQty||0) > 0) ? '' : '<div style="text-align:center;font-size:11px;font-weight:bold;border:1px solid #000;padding:4px;margin-bottom:8px;">⚠️ KOI ITEM "GIVEN" MARK NAHI HUA</div>'}
       <div style="margin-bottom:12px; line-height:1.5;">
-        <div style="font-size:20px;font-weight:900;">INV: ${invoiceNo}</div>
+        <div style="font-size:20px;font-weight:900;">${invoiceNo}</div>
         <div style="font-size:18px;font-weight:bold;">${escapeHtml(c.name)}</div>
         <div style="font-size:16px;font-weight:bold;color:#333;">${new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</div>
       </div>
@@ -863,13 +981,18 @@ function printPartialSlip(orderId) {
         </div>
       ` : ''}
 
-      <div style="text-align:center;margin-top:10px;font-size:14px;font-weight:bold;border-top:1px dashed #000;padding-top:6px;">
-        Remaining Balance: ${fmtMoney(o.due)}
+      <div style="margin-top:10px;font-size:12px;border-top:1px dashed #000;padding-top:6px;">
+        <div style="display:flex;justify-content:space-between;"><span>Bill Total</span><span style="font-weight:bold;">${fmtMoney(o.total)}</span></div>
+        ${(+o.deliveryCharge || 0) > 0 ? `<div style="display:flex;justify-content:space-between;"><span>↳ includes ${escapeHtml(o.deliveryChargeLabel || DB.deliveryChargeLabel())}</span><span>+ ${fmtMoney(o.deliveryCharge)}</span></div>` : ''}
+        <div style="display:flex;justify-content:space-between;"><span>Paid</span><span>${fmtMoney(o.paid)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:bold;margin-top:3px;border-top:1px dotted #000;padding-top:3px;">
+          <span>Remaining Balance</span><span>${fmtMoney(o.due)}</span>
+        </div>
       </div>
     </div>
   `;
   
   const wrap = document.createElement('div');
   wrap.innerHTML = html;
-  if (typeof printElement === 'function') printElement(wrap, { title: 'Partial Delivery' });
+  if (typeof printElement === 'function') return printElement(wrap, { title: 'Partial Delivery' });
 }

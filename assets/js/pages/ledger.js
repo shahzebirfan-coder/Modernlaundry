@@ -139,12 +139,12 @@ function openCustomerLedger(custId) {
     const debit = o.total || 0;
     const credit = o.paid || 0;
     runningBalance += debit - credit;
-    const invNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#' + o.id.slice(-6).toUpperCase();
+    const invNo = DB.invoiceLabel(o);
     return `<tr>
       <td>${fmtDateShort(o.createdAt)}</td>
       <td><b>${escapeHtml(invNo)}</b></td>
       <td>${o.items.length} items / ${o.items.reduce((s,i)=>s+(i.qty||0),0)} pcs</td>
-      <td><span class="badge ${o.status}">${o.status}</span></td>
+      <td><span class="badge ${o.status}">${typeof statusBadgeLabel === "function" ? statusBadgeLabel(o.status) : o.status}</span></td>
       <td style="text-align:right;color:var(--danger);">${fmtMoney(debit)}</td>
       <td style="text-align:right;color:var(--success);">${fmtMoney(credit)}</td>
       <td style="text-align:right;"><b style="color:${runningBalance>0?'var(--danger)':'var(--success)'};">${fmtMoney(runningBalance)}</b></td>
@@ -238,7 +238,7 @@ function openCollectPayment(custId) {
         <thead><tr><th>Date</th><th>Invoice</th><th>Total</th><th>Paid</th><th>Due</th></tr></thead>
         <tbody>
           ${dueOrders.map(o => {
-            const invNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#' + o.id.slice(-6).toUpperCase();
+            const invNo = DB.invoiceLabel(o);
             return `<tr>
               <td>${fmtDateShort(o.createdAt)}</td>
               <td><b>${escapeHtml(invNo)}</b></td>
@@ -319,7 +319,7 @@ function sendDueReminder(custId) {
   if (phone.startsWith('0') && phone.length === 11) phone = '92' + phone.substring(1);
 
   const invList = dueOrders.map(o => {
-    const invNo = o.invoiceNo ? `INV-${o.invoiceNo}` : '#' + o.id.slice(-6).toUpperCase();
+    const invNo = DB.invoiceLabel(o);
     return `• ${invNo} (${fmtDateShort(o.createdAt)}) — ${fmtMoney(o.due)}`;
   }).join('\n');
 

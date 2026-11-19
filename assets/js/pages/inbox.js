@@ -101,7 +101,7 @@ function renderPaymentsTab() {
   }
   $('#inboxContent').innerHTML = proofs.map(p => {
     const o = DB.get('orders', p.orderId) || {};
-    const invNo = o.invoiceNo ? 'INV-' + o.invoiceNo : '#' + p.orderId.slice(-6).toUpperCase();
+    const invNo = DB.invoiceLabel(o);
     const statusColors = {pending:'warning',verified:'success',rejected:'danger'};
     return `
       <div class="card" style="margin-bottom:10px;${p.status==='pending'?'border-left:4px solid var(--warning);background:#fef3c7;':''}">
@@ -135,8 +135,8 @@ function renderPaymentsTab() {
       const newDue = o.total - newPaid;
       DB.update('orders', p.orderId, { paid: newPaid, due: newDue, isCredit: newDue > 0 });
       DB.update('paymentProofs', id, { status: 'verified', verifiedAt: new Date().toISOString(), verifiedBy: DB.currentUser().username });
-      if (typeof logAction === 'function') logAction('payment.verify', `${fmtMoney(p.amount)} on INV-${o.invoiceNo||p.orderId.slice(-6)}`);
-      toast(`✅ Payment verified! ${fmtMoney(p.amount)} added to ${o.invoiceNo?'INV-'+o.invoiceNo:p.orderId}`, 'success');
+      if (typeof logAction === 'function') logAction('payment.verify', `${fmtMoney(p.amount)} on ${DB.invoiceLabel(o)}`);
+      toast(`✅ Payment verified! ${fmtMoney(p.amount)} added to ${DB.invoiceLabel(o)}`, 'success');
       renderPaymentsTab();
     } else if (b.dataset.act === 'reject') {
       confirmDialog('Reject this payment proof? Customer should be notified.', () => {

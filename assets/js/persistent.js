@@ -42,17 +42,17 @@ const Persistent = {
 
   /* === 3. Backup critical settings to IndexedDB === */
   CRITICAL_KEYS: [
-    'mrLaundryDB',
+    'mrLaundryDB',            // users[] here carry NO passwords (hashed vault instead)
     'mrLaundryFirebaseCfg',
     'mrLaundryShopId',
     'mrLaundryCloudEnabled',
     'mrLaundryGDriveClientId',
-    'mrLaundrySession',
-    'mrLaundryTheme',
-    'mrLaundryLang',
-    'mrLaundryPortalLang',
-    'mrLaundryActiveBranch'
+    'mrLaundryActiveBranch',
+    'mdcVaultV1',             // password verifiers (one-way)
+    'mdcCodeVaultV1',         // IT-admin / master code / live PIN verifiers
+    'mdcVaultSeed'
   ],
+  // Never mirrored: the live session, UI prefs, and anything token-ish.
 
   _db: null,
 
@@ -91,6 +91,20 @@ const Persistent = {
         r.onerror = () => reject(r.error);
       });
     } catch (e) { return null; }
+  },
+
+  /* Older builds mirrored 'mrLaundrySession' (and password-bearing DB rows)
+     into IndexedDB. Wipe those keys once so nothing stale stays behind. */
+  async purgeLegacy() {
+    try {
+      const db = await this.openIDB();
+      if (!db) return;
+      await new Promise((resolve) => {
+        const tx = db.transaction(['kv'], 'readwrite');
+        ['mrLaundrySession', '_lastBackup'].forEach(k => { try { tx.objectStore('kv').delete(k); } catch (e) {} });
+        tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+      });
+    } catch (e) {}
   },
 
   /* Backup all critical localStorage keys to IndexedDB */
@@ -137,6 +151,9 @@ const Persistent = {
       return;
     }
   } catch (e) {}
+
+  // Step 1b: drop pre-vault leftovers (plaintext session / passwords)
+  try { await Persistent.purgeLegacy(); } catch (e) {}
 
   // Step 2: Request persistent storage permission
   await Persistent.requestPersistence();
