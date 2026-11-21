@@ -833,3 +833,98 @@ Software ko is ki zaroorat **nahi** — browser sirf public web config use karta
 ### Client ke liye
 Live dashboard URL (`.../live.html`) par 30 second auto-refresh chalta rahega. Data wahan tab aayega jab
 POS ne ek dafa **Cloud Sync ON** kiya ho (cloud abhi khali hai).
+
+
+---
+
+## 15H. POS par "Realtime Database se connection nahi bana" magar cloud-check.html Connected — REST fallback
+
+### Masla
+`cloud-check.html` (browser) connect ho raha tha, lekin POS ke andar Firebase **SDK** connect nahi ho raha tha —
+matlab masla network/project ka nahi, SDK ke load/init ka tha. Client ke liye dono messages ulti lagti hain.
+
+### Fix: `rest` backend
+`cloudsync.js` mein teesra backend add kiya:
+1. **Firestore** (agar chale)
+2. **Realtime Database (SDK)** — probe timeout 6s → **10s**
+3. **Realtime Database (REST)** — SDK bilkul na chale to seedha HTTPS se:
+   - read: `GET <dbUrl>/shops/<shopId>.json`
+   - write: `PUT <dbUrl>/shops/<shopId>.json`
+   - polling har **20 second** (push/pull/merge wahi merge logic)
+   - manager/status mein: **🗄️ Backend: Realtime Database (REST)** + URL
+   - `Connection test` bhi REST mode samajhta hai
+
+Is ka faida: agar user ke browser mein gstatic/SDK block ho, sync phir bhi chalega (koi SDK nahi chahiye).
+
+### Test (verified)
+`tcloudrest.js` 9 ✓ — SDK hamesha fail hone par bhi REST se connect, 125 products ka payload upload, doosre device
+ka record merge, manager mein REST backend ka label.
+Baqi suites: tcloud 20 ✓ · tcloudbtn3 12 ✓ · tcloudurl 9 ✓ · tcloudprobe 8 ✓ · tcloudrestore 9 ✓ · tcloudcheck 12 ✓ ·
+tlive 7 ✓ · tportalrtdb 6 ✓ · trtdb 11 ✓ · tcloudoffline 8 ✓.
+
+
+---
+
+## 15I. Auto-Sync — naye system par login hote hi cloud khud ON
+
+Client ki hidayat: "baar baar Settings mein ja kar button na dabana parey".
+
+### Ab kya hota hai (bina koi click)
+1. Software khulta hai (login screen / dashboard) → `cloudsync.js` ka auto-init chalta hai (2.5s baad).
+2. `ensureCloudConnected()` — bundled config se khud config + Shop ID set, phir
+   `init()` → `setEnabled(true)` → `push()` → `pullAndMerge()` → `listen()`.
+3. Backend khud chuna jata hai: Firestore → RTDB (SDK) → **RTDB (REST)**. Jo mile, wohi.
+4. Ek dafa toast: **"☁️ Cloud Sync ON — data cloud par mehfooz"**. Bas.
+5. Network gir jaye / tab dobara saamne aaye → `online` + `visibilitychange` par **chup chaap reconnect** (30s throttle).
+
+### Barsaati behtari
+- `showCloudRecoveryPrompt()` ab koi khuli window (Settings → Cloud Sync) **band nahi karta** — pehle
+  auto-connect fail hone par recovery popup khuli diagnosis ko replace kar deta tha.
+- REST fallback `typeof fetch !== 'function'` guard (purane webview / jsdom jaisi jagah crash na ho).
+- Settings card ki zubaan badli: *"login hote hi sync khud ON ho jata hai"* + (agar OFF ho to)
+  *"Abhi connect karein (agar khud ON na hua ho)"*.
+
+### Manual path khatam nahi hua
+Risk ya debugging ke liye `⚙️ Cloud Sync Settings kholein` aur `🔒 Advanced` (password) waise hi hain.
+
+### Test (verified)
+`tcloudauto.js` 11 ✓ — naye device par sync OFF se **khud ON**, backend active, data push, single toast,
+doosre device ka record merge, network `online` par reconnect. REST/offline/url/restore/doctor/live/portal bhi green.
+
+
+---
+
+## 15J. 🔴 DATA LOSS BUG — invoice bane magar cloud par nahi pohnche (FIXED)
+
+Client ki report: "kal raat 3–4 invoice generate kiye" magar cloud par `orders: 0`.
+
+### Root cause (reproduce kiya, `tinvocies`-style test se confirm)
+`ensureCloudConnected()` ka catch **har failure par `setEnabled(false)`** kar deta tha — chahe connect
+ho chuka ho aur sirf `push` ya `listen` fail hui ho. Us ke baad `DB.save()` ka push-hook is shart par
+ruk jata tha:
+```js
+if (!CLOUD.isEnabled() || !CLOUD.isReady()) return;   // ← yahan silently return
+```
+Natija: **sync OFF, koi error nahi, aur har naya invoice sirf local reh jata**.
+
+Doosra masla: connect hone se pehle ka koi bhi save **"dirty" mark hi nahi hota tha**, is liye connect ke
+baad bhi woh push nahi hota tha.
+
+### Fix (4 tabdeeliyan)
+1. **Stage-aware enable** — `init` fail ho to hi OFF; `push`/`merge`/`listen` fail ho to sync **ON** rehta hai
+   aur 30s retry timer lag jata hai.
+2. **Dirty tracking** — `DB.save()` har dafa `_dirty = true` + `_dirtyAt`; agar config mojood hai magar sync OFF
+   hai to `ensureCloudConnected()` khud chal jata hai (data chhupta nahi).
+3. **Safety net** — har 30 second: agar `_dirty` hai to push retry (silent).
+4. **`pagehide` beacon** — tab band/reload hone se pehle bacha hua data `fetch(..., {keepalive:true})` se bhej diya jata hai.
+   Saath hi SDK `appendChild` par `document.head || body` guard.
+
+### Test (verified)
+`tinvoices.js` 8 ✓ — (a) 3 invoice → teenon cloud par, (b) pehli push fail hone par bhi invoice pohnchta hai aur
+sync ON rehta hai, (c) transient failure ke baad agla save turant retry karta hai.
+Baqi 15 suites green (`tcloud*`, `tlive`, `tportalrtdb`, `trtdb`, payment/press/discount...).
+
+### Client ke liye zaroori hidayat
+Jo 3–4 invoice us raat bane the woh **sirf us device ke local storage** mein honge (cloud par kabhi nahi gaye).
+Naya build usi device par kholne par woh khud upload ho jayenge (dirty + auto-connect). Agar woh device
+badal gaya ho to purana device kholna hoga; warna woh invoices dobara banane parenge.

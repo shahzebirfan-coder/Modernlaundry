@@ -286,11 +286,12 @@ function renderSettings() {
           </p>
           <button class="btn btn-primary btn-block btn-lg" id="openCloudBtn" style="font-weight:800;">⚙️ Cloud Sync Settings kholein</button>
           ${(typeof CLOUD !== 'undefined' && !CLOUD.isEnabled() && CLOUD.hasDefaults()) ? `
-            <button class="btn btn-success btn-block" id="cloudQuickOn" style="margin-top:8px;font-weight:800;">☁️ Cloud Sync ON karein (1 click)</button>
-            <small style="display:block;text-align:center;color:var(--text-soft);margin-top:6px;">Har naye device par yehi button dabana hai</small>
+            <button class="btn btn-success btn-block" id="cloudQuickOn" style="margin-top:8px;font-weight:800;">☁️ Abhi connect karein (agar khud ON na hua ho)</button>
+            <small style="display:block;text-align:center;color:var(--text-soft);margin-top:6px;">Aam tor par zaroorat nahi — login hote hi sync khud ON ho jata hai</small>
           ` : ''}
           <button class="btn btn-ghost btn-block btn-sm" id="cloudAdvancedBtn" style="margin-top:8px;">🔒 Advanced (IT Admin password)</button>
           <div id="cloudStatus" style="font-size:11px;color:var(--text-soft);margin-top:8px;text-align:center;"></div>
+          <small id="cloudAutoNote" style="display:block;text-align:center;color:var(--success);margin-top:4px;">⚡ Auto-sync ON — har naye device par login karte hi khud connect ho jata hai</small>
         </div>
 
         <div class="card" style="margin-bottom:20px;">

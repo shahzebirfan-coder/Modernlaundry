@@ -114,7 +114,7 @@ const CLOUD = {
       await new Promise((resolve, reject) => {
         const s = document.createElement('script');
         s.src = src; s.onload = resolve; s.onerror = reject;
-        document.head.appendChild(s);
+        (document.head || document.body || document.documentElement).appendChild(s);
       });
     }
   },
@@ -169,6 +169,18 @@ const CLOUD = {
     if (rtdb) { this._mode = 'rtdb'; localStorage.setItem(this.BACKEND_KEY, 'rtdb'); return rtdb; }
     this._rtdbSkip = true;
 
+    /* ---- REST fallback (SDK na chale to bhi sync chalta rahe) ---- */
+    try {
+      const restUrl = await this._restPickUrl();
+      if (restUrl) {
+        this._mode = 'rest';
+        this._db = null;
+        localStorage.setItem(this.BACKEND_KEY, 'rest');
+        console.log('[CloudSync] Realtime Database (REST) mode active:', restUrl);
+        return { _rest: true };
+      }
+    } catch (e) { this._lastRTDBError = (e && e.message) || String(e); }
+
     this._db = null;
     const onLine = (typeof navigator !== 'undefined') ? navigator.onLine !== false : true;
     const rtErr = this._lastRTDBError || '';
@@ -207,7 +219,7 @@ const CLOUD = {
       s.onerror = () => done(reject, new Error('Realtime Database SDK load nahi hua'));
       // 5s se zyada intezaar nahi — warna UI atak jati hai
       setTimeout(() => done(reject, new Error('Realtime Database SDK timeout')), 5000);
-      document.head.appendChild(s);
+      (document.head || document.body || document.documentElement).appendChild(s);
     });
   },
   /* Realtime Database ke mumkin URLs — jo bhi chal jaye wohi use hota hai.
@@ -259,7 +271,7 @@ const CLOUD = {
         const ref = rdb.ref('.info/connected');
         const cb = (snap) => { if (snap.val() === true) finish(true); };
         try { ref.on('value', cb); } catch (e) { return finish(false); }
-        setTimeout(() => { try { ref.off('value', cb); } catch (e) {} finish(false); }, 6000);
+        setTimeout(() => { try { ref.off('value', cb); } catch (e) {} finish(false); }, 10000);
       });
       if (!ok) return null;
       this._rdb = rdb;
@@ -272,6 +284,55 @@ const CLOUD = {
       console.warn('[CloudSync] RTDB probe failed for', url, this._lastRTDBError);
       return null;
     }
+  },
+
+  /* ------------------------------------------------------------
+     REST fallback — agar Firebase SDK connect na ho jaye magar network
+     theek ho, to seedha Realtime Database ke REST endpoint se kaam lete hain.
+     (Rules public hain, is liye yeh bina login chalta hai.)
+     ------------------------------------------------------------ */
+  async _restPickUrl() {
+    if (typeof fetch !== 'function') return null;
+    for (const url of this.getDatabaseURLCandidates()) {
+      try {
+        const res = await fetch(url + '/.json?shallow=true', { cache: 'no-store' });
+        if (res.ok) {
+          this._restUrl = url;
+          localStorage.setItem('mrlCloudDatabaseURL', url);
+          return url;
+        }
+      } catch (e) { this._lastRTDBError = (e && e.message) || String(e); }
+    }
+    return null;
+  },
+  async _restPull() {
+    const url = this._restUrl || await this._restPickUrl();
+    if (!url) return null;
+    const res = await fetch(url + '/shops/' + this.getShopId() + '.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error('REST read failed (' + res.status + ')');
+    const v = await res.json();
+    if (!v || !v.data) return null;
+    this._lastRestVersion = v.version || 0;
+    return JSON.parse(v.data);
+  },
+  async _restPush(data) {
+    const url = this._restUrl || await this._restPickUrl();
+    if (!url) throw new Error('Realtime Database reachable nahi');
+    const payload = {
+      data: JSON.stringify(data),
+      version: Date.now(),
+      deviceId: getDeviceId(),
+      deviceLabel: getDeviceLabel(),
+      updatedBy: DB.currentUser()?.username || 'unknown',
+      updatedAt: new Date().toISOString()
+    };
+    const res = await fetch(url + '/shops/' + this.getShopId() + '.json', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('REST write failed (' + res.status + ')');
+    return payload.version;
   },
 
   /* RTDB path: shops/<shopId> mein poora data (ek hi JSON) */
@@ -344,6 +405,13 @@ const CLOUD = {
     this._syncing = true;
     try {
       const db = await this.init();
+      if (this._mode === 'rest') {
+        const v = await this._restPush(DB._data);
+        this._lastAppliedVersion = v;
+        localStorage.setItem(this.LAST_SYNC_KEY, new Date().toISOString());
+        console.log('[CloudSync] Pushed via REST');
+        return;
+      }
       if (this._mode === 'rtdb') {
         const v = await this._rtdbPush(DB._data);
         this._lastAppliedVersion = v;
@@ -433,6 +501,16 @@ const CLOUD = {
   /* ============== PULL & MERGE (CHUNKED) ============== */
   async pullAndMerge() {
     const db = await this.init();
+    if (this._mode === 'rest') {
+      const remote = await this._restPull();
+      if (!remote) return false;
+      const merged = this.mergeData(DB._data, remote);
+      DB._data = merged;
+      this._suppressPush = true;
+      try { DB.save(); } finally { this._suppressPush = false; }
+      localStorage.setItem(this.LAST_SYNC_KEY, new Date().toISOString());
+      return true;
+    }
     if (this._mode === 'rtdb') {
       const remote = await this._rtdbPull();
       if (!remote) return false;
@@ -497,6 +575,30 @@ const CLOUD = {
   async listen() {
     if (this._unsub) this._unsub();
     const db = await this.init();
+    if (this._mode === 'rest') {
+      const myDeviceId = getDeviceId();
+      const poll = async () => {
+        try {
+          const remote = await this._restPull();
+          if (!remote) return;
+          const remoteVersion = this._lastRestVersion || 0;
+          if (remoteVersion && remoteVersion <= this._lastAppliedVersion) return;
+          this._lastAppliedVersion = remoteVersion;
+          const merged = this.mergeData(DB._data, remote);
+          DB._data = merged;
+          this._suppressPush = true;
+          try { DB.save(); } finally { this._suppressPush = false; }
+          if (typeof app !== 'undefined' && app.current && document.visibilityState === 'visible') {
+            setTimeout(() => app.go(app.current), 600);
+          }
+        } catch (e) { console.warn('[CloudSync] REST poll failed', e && e.message); }
+      };
+      this._restTimer = setInterval(poll, 20000);
+      this._unsub = () => clearInterval(this._restTimer);
+      setTimeout(poll, 3000);
+      console.log('[CloudSync] REST polling every 20s');
+      return;
+    }
     if (this._mode === 'rtdb') {
       const myDeviceId = getDeviceId();
       const ref = this._rdb.ref('shops/' + this.getShopId());
@@ -585,6 +687,64 @@ const CLOUD = {
   }
 };
 
+/* ============================================================
+   ensureCloudConnected(auto)
+   ------------------------------------------------------------------
+   Naya device / naya system: login hote hi Cloud Sync khud ON.
+   Kuch bhi dabane ki zaroorat nahi. Push pehle, phir merge (data safe),
+   phir real-time listen (ya REST polling) — aur agar network gir jaye to
+   page wapas aane par khud dobara connect.
+   ============================================================ */
+let _cloudConnectPromise = null;
+async function ensureCloudConnected(auto) {
+  if (!CLOUD.isReady()) {
+    const cfg = CLOUD.getDefaultConfig();
+    if (!cfg) return false;
+    CLOUD.setConfig(cfg);
+    if (!CLOUD.getShopId()) CLOUD.setShopId(CLOUD.getDefaultShopId() || 'modern-laundry-main');
+  }
+  if (_cloudConnectPromise) return _cloudConnectPromise;
+  _cloudConnectPromise = (async () => {
+    let stage = 'init';
+    try {
+      await CLOUD.init();                 // firestore / rtdb / rest — jo chale
+      stage = 'push';
+      CLOUD.setEnabled(true);             // ON sirf connect ke BAAD
+      await CLOUD.push();                 // is device ka data cloud par
+      CLOUD._dirty = false;
+      stage = 'merge';
+      await CLOUD.pullAndMerge();         // phir cloud se merge
+      stage = 'listen';
+      await CLOUD.listen();
+      CLOUD._initialMergeDone = true;
+      CLOUD._lastAutoError = null;
+      console.log('[CloudSync] auto-connected (' + CLOUD._mode + ')');
+      if (auto && typeof toast === 'function') toast('☁️ Cloud Sync ON — data cloud par mehfooz', 'success');
+      return true;
+    } catch (e) {
+      CLOUD._lastAutoError = (e && e.message) || String(e);
+      console.warn('[CloudSync] auto-connect failed at ' + stage + ':', CLOUD._lastAutoError);
+      /* ⚠️ AGAR data cloud par ja chuka hai (push ho gaya) to sync ko OFF na karein —
+         warna user ka naya data chup chaap upload hona band ho jata hai.
+         Sirf tab OFF karein jab shuru mein hi connect na hua ho. */
+      if (stage === 'init') {
+        CLOUD.setEnabled(false);
+        return false;
+      }
+      CLOUD._initialMergeDone = true;
+      CLOUD._retryTimer = CLOUD._retryTimer || setInterval(() => {
+        if (!CLOUD.isEnabled()) return;
+        CLOUD.push().then(() => { CLOUD._dirty = false; }).catch(e => console.warn('[CloudSync] retry push failed', e && e.message));
+      }, 30000);
+      return true;
+    } finally {
+      _cloudConnectPromise = null;
+    }
+  })();
+  return _cloudConnectPromise;
+}
+window.ensureCloudConnected = ensureCloudConnected;
+
 /* ============== AUTO-INIT ============== */
 (function cloudAutoInit() {
   if (typeof DB === 'undefined') return;
@@ -608,10 +768,9 @@ const CLOUD = {
     }
     // Pehli dafa / naya device: bundled config ho to khud connect ho jaye
     if (CLOUD.hasDefaults() && !CLOUD.isEnabled()) {
-      try {
-        await enableCloudSyncQuick();
-      } catch (e) {
-        showCloudRecoveryPrompt('Cloud sync could not start: ' + e.message);
+      const okConnected = await ensureCloudConnected(true);
+      if (!okConnected) {
+        showCloudRecoveryPrompt('Cloud sync could not start: ' + (CLOUD._lastAutoError || 'unknown'));
       }
       return;
     }
@@ -624,6 +783,10 @@ const CLOUD = {
 function showCloudRecoveryPrompt(msg) {
   if (typeof openModal !== 'function') return;
   if (sessionStorage.getItem('mrLaundryCloudPrompted')) return;
+  /* agar user pehle se kisi window (Settings → Cloud Sync) mein hai to usay
+     recovery popup se na cheerein — wahan pura UI mojood hai */
+  const root = typeof document !== 'undefined' ? document.getElementById('modal-root') : null;
+  if (root && root.children.length > 0 && root.innerHTML.trim() !== '') return;
   sessionStorage.setItem('mrLaundryCloudPrompted', '1');
   setTimeout(() => {
     openModal('<div style="text-align:center;padding:20px;">' +
@@ -694,6 +857,55 @@ async function reconnectCloudSync() {
   }
 }
 
+/* ---- SAFETY NET: agar koi push fail ho jaye to data chhoota nahi ----
+   (client ke case mein invoice bane the magar cloud par nahi pohnche) */
+(function cloudSafetyPush() {
+  if (typeof window === 'undefined') return;
+  setInterval(() => {
+    if (!CLOUD.isReady()) return;
+    if (!CLOUD.isEnabled()) return;
+    if (!CLOUD._dirty) return;
+    CLOUD.push().then(() => { CLOUD._dirty = false; }).catch(() => {});
+  }, 30000);
+
+  /* tab band / reload hone se pehle bacha hua data bhejne ki koshish (REST) */
+  window.addEventListener('pagehide', () => {
+    if (!CLOUD._dirty || !CLOUD.isReady()) return;
+    try {
+      const url = CLOUD._restUrl || CLOUD.getDatabaseURL();
+      if (!url || typeof fetch !== 'function') return;
+      const body = JSON.stringify({
+        data: JSON.stringify(DB._data), version: Date.now(),
+        deviceId: getDeviceId(), deviceLabel: getDeviceLabel(),
+        updatedBy: (DB.currentUser() && DB.currentUser().username) || 'unknown',
+        updatedAt: new Date().toISOString()
+      });
+      fetch(url + '/shops/' + CLOUD.getShopId() + '.json', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body, keepalive: true
+      }).catch(() => {});
+    } catch (e) {}
+  });
+})();
+
+/* ---- network wapas aaye ya tab dobara saamne aaye to chup chaap reconnect ---- */
+(function cloudAutoReconnect() {
+  if (typeof window === 'undefined') return;
+  let lastTry = 0;
+  const tryReconnect = async (why) => {
+    if (!CLOUD.hasDefaults()) return;
+    if (CLOUD.isEnabled() && CLOUD._initialMergeDone && CLOUD._mode !== 'rest') return;
+    if (Date.now() - lastTry < 30000) return;   // 30s se zyada baar nahi
+    lastTry = Date.now();
+    console.log('[CloudSync] reconnect (' + why + ')');
+    await ensureCloudConnected(false);
+  };
+  window.addEventListener('online', () => tryReconnect('online'));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') tryReconnect('visible');
+  });
+})();
+
 /* ============== HOOK DB OPERATIONS ============== */
 (function hookDB() {
   if (typeof DB === 'undefined') return;
@@ -749,10 +961,26 @@ async function reconnectCloudSync() {
     origSave();
     localStorage.setItem('mrLaundryLocalVersion', Date.now());
     if (CLOUD._suppressPush) return;
-    if (!CLOUD.isEnabled() || !CLOUD.isReady()) return;
+
+    /* har save ko "dirty" mark karein — chahe abhi connect na ho.
+       Cloud connect hone par yeh khud push ho jayega (koi data chhoota nahi). */
+    CLOUD._dirty = true;
+    CLOUD._dirtyAt = Date.now();
+
+    if (!CLOUD.isReady()) {
+      if (CLOUD.hasDefaults()) ensureCloudConnected(false);
+      return;
+    }
+    if (!CLOUD.isEnabled()) {
+      /* sync OFF tha magar config mojood hai → khud connect kar ke data bhejne ki koshish */
+      ensureCloudConnected(false);
+      return;
+    }
     clearTimeout(pushTimer);
     pushTimer = setTimeout(() => {
-      CLOUD.push().catch(e => console.warn('Push failed:', e));
+      CLOUD.push()
+        .then(() => { CLOUD._dirty = false; })
+        .catch(e => console.warn('Push failed:', e));
     }, 1500);
   };
 })();
@@ -808,6 +1036,7 @@ function openCloudSyncManager(opts) {
     </div>
 
     <div style="background:var(--surface-alt);padding:10px;border-radius:8px;font-size:12px;margin-bottom:14px;">
+      ${CLOUD._mode === 'rest' ? '🗄️ Backend: <b>Realtime Database (REST)</b><br><small style="opacity:.75;">' + escapeHtml(CLOUD._restUrl || '') + '</small><br>' : ''}
       ${CLOUD._mode === 'rtdb' ? '🗄️ Backend: <b>Realtime Database</b><br><small style="opacity:.75;">' + escapeHtml(CLOUD._rdbUrl || CLOUD.getDatabaseURL() || '') + '</small><br>' : (cfg ? '🗄️ Backend: <b>Firestore</b><br>' : '')}
       ${lastSync ? `🔄 Last sync: ${new Date(lastSync).toLocaleString()}` : '⚠️ Never synced'}
       <br>📱 This device: <b>${escapeHtml(deviceLabel)}</b> <code style="font-size:10px;">${deviceId}</code>
@@ -920,6 +1149,14 @@ function openCloudSyncManager(opts) {
         const shop = CLOUD.getShopId() || ($('#shopId', m)?.value || '').trim();
         if (!shop) throw new Error('Shop ID khali hai — upar "Shop ID" mein modern-laundry-main likhein');
         const db = await CLOUD.init();          // yahan offline/SDK errors pakre jate hain
+        if (CLOUD._mode === 'rest') {
+          const remote = await CLOUD._restPull();
+          show((remote
+            ? '✅ <b>Connection OK</b> (Realtime Database · REST)<br>Cloud par data mojood hai. Ab "Merge Now" ya "Force Pull" use kar sakte hain.'
+            : '✅ <b>Connection OK</b> (Realtime Database · REST) — cloud khali hai.<br>Ab <b>☁️ Cloud Sync ON karein</b> dabayein.')
+            + '<br><small>' + escapeHtml(CLOUD._restUrl || '') + '</small>', 'success');
+          return;
+        }
         if (CLOUD._mode === 'rtdb') {
           const remote = await CLOUD._rtdbPull();
           const where = `<br><small>Database: ${escapeHtml(CLOUD._rdbUrl || '')}</small>`;
