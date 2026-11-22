@@ -191,6 +191,18 @@ function renderSettings() {
             Margin: <b style="color:var(--text);">${s.invoiceMarginMm == null ? 2 : +s.invoiceMarginMm}mm</b><br>
             1-bit logo: <b style="color:var(--text);">${s.invoiceLogoMono !== false ? 'ON (crisp thermal)' : 'OFF (colour)'}</b>
           </div>
+          <div style="margin-bottom:10px;padding:10px;background:var(--surface-alt);border-radius:8px;">
+            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:6px;">🖨️ Print right side se kat raha ho / amount adhoora aaye to</label>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input id="rawPaperMm" type="text" inputmode="numeric" value="${(+s.invoiceRawPaperMm || (+s.invoicePaper === 58 ? 52 : 72))}"
+                     style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px;text-align:center;font-weight:700;">
+              <span style="font-size:12px;color:var(--text-soft);">mm — printer ki asli printable width</span>
+              <button class="btn btn-primary btn-sm" id="saveRawPaperBtn">Save &amp; auto-fit</button>
+            </div>
+            <small style="display:block;color:var(--text-soft);font-size:11px;margin-top:6px;">
+              80mm roll par aksar printer sirf <b>72mm</b> tak print karta hai. Agar kinare kat rahe hon to value kam karein (70 → 68).
+            </small>
+          </div>
           <button class="btn btn-secondary btn-block" id="resetPrintBtn" style="margin-bottom:8px;">↺ Reset to Recommended (80mm · 70% logo · 20mm)</button>
           <button class="btn btn-ghost btn-block" id="wideLogoBtn" style="margin-bottom:8px;">↔ Wider Logo (70% · 26mm tall)</button>
           <small style="color:var(--text-soft);font-size:11px;display:block;line-height:1.6;">
@@ -455,6 +467,15 @@ function renderSettings() {
   };
 
   /* One-click, shop-ready thermal print setup ("print too big" fix). */
+  if ($('#saveRawPaperBtn')) $('#saveRawPaperBtn').onclick = () => {
+    const el = $('#rawPaperMm');
+    const mm = Math.max(40, Math.min(112, parseInt((el && el.value) || '0', 10) || 0));
+    if (!mm) { toast('Sahi width likhein (e.g. 72)', 'error'); return; }
+    DB.update('settings', 'main', { invoiceRawPaperMm: mm, invoiceMarginMm: 2 });
+    DB.save();
+    toast('✅ Paper width ' + mm + 'mm set ho gayi — ab test print karein', 'success');
+    if (typeof renderSettings === 'function') renderSettings();
+  };
   if ($('#resetPrintBtn')) $('#resetPrintBtn').onclick = () => {
     confirmDialog('Apply the recommended thermal print setup?<br><br><b>80mm paper · logo 70% width · max 20mm tall · 2mm margin · crisp 1-bit logo</b><br><br>You can fine-tune it any time in the Invoice Customizer.', () => {
       DB.saveSettings({

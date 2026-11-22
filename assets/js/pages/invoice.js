@@ -235,7 +235,7 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
     : '';
 
   return `
-    <div class="invoice-page invoice-customer" style="max-width:${width}px;font-size:${fontSize}px;background:#fff;padding:16px;">
+    <div class="invoice-page invoice-customer" style="max-width:100%;font-size:${fontSize}px;background:#fff;padding:10px;">
       ${logoBlock}
       <div style="text-align:center;font-size:${fontSize}px;margin-bottom:12px;line-height:1.4;">
         ${showTagline && s.tagline ? '<b>'+escapeHtml(s.tagline)+'</b><br>':''}
@@ -319,7 +319,7 @@ function buildOfficeSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
     || (typeof DB !== 'undefined' && DB.deliveryChargeLabel ? DB.deliveryChargeLabel() : 'Delivery Charges');
 
   return `
-    <div class="invoice-page invoice-office" style="max-width:${width}px;font-size:${fontSize}px;padding:16px;background:#fff;border:1px dashed #ccc;">
+    <div class="invoice-page invoice-office" style="max-width:100%;font-size:${fontSize}px;padding:10px;background:#fff;">
       ${s.invoiceShowLogo !== false ? `
       <div style="text-align:center;margin-bottom:6px;">
         <img class="inv-logo inv-logo-office" src="${THERMAL && THERMAL.info(s) ? THERMAL.info(s).dataUrl : s.logoImage}"

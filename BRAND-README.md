@@ -928,3 +928,34 @@ Baqi 15 suites green (`tcloud*`, `tlive`, `tportalrtdb`, `trtdb`, payment/press/
 Jo 3–4 invoice us raat bane the woh **sirf us device ke local storage** mein honge (cloud par kabhi nahi gaye).
 Naya build usi device par kholne par woh khud upload ho jayenge (dirty + auto-connect). Agar woh device
 badal gaya ho to purana device kholna hoga; warna woh invoices dobara banane parenge.
+
+
+---
+
+## 15K. Print fix — thermal receipt right side se kat raha tha / amount adhoora
+
+Client ka screenshot: "OFFICE COPY" slip mein amounts (`Rs. 30`) kinare se kat rahe the, content centre mein nahi tha.
+
+### Root cause (WeasyPrint se box-by-box nap kar confirm kiya)
+1. Invoice ki `<table>` ki **columns ki width fix nahi** thi → lambi value (date / customer name / phone)
+   table ko paper se **bahar** khinch leti thi (measured: `Booking Date` row 69mm se zyada).
+2. Amount cells par `white-space: nowrap` tha → right column squeeze ho kar paper ke bahar nikal jata tha.
+3. `.invoice-page` ka fixed `max-width: 360px` + `@page margin: 6mm` + body padding — teeno mil kar
+   printable area tang kar dete the (Windows driver 80mm roll par aksar sirf **72mm** deta hai).
+
+### Fix (`assets/js/utils.js` print document)
+- `table-layout: fixed` + columns pinned: pehli **55%**, aakhri (amount) **45%**.
+- Amount cells `white-space: normal` + `overflow-wrap: anywhere` (lambi value next line par, paper ke andar).
+- `@page { size: <printableWidth>mm auto; margin: 0 }` + `body { width: printable; padding: marginMm }` (dono taraf barabar).
+- `.invoice-page` ab `max-width:100%` (fixed 360px nahi) — invoice.js mein bhi.
+- Naya setting: **`invoiceRawPaperMm`** (default 80mm roll → **72**, 58mm → 52) —
+  Settings → 🖨️ Thermal Print Setup mein **"Printable width"** field + **Save & auto-fit** button.
+
+### Verified
+Box-level measurement (WeasyPrint): 72mm page par **0 overflow boxes** (pehle date/name rows 69mm+ thin).
+`tprintfix.js` 13 ✓ · `tdcprint.js`, `tdelcharge.js`, `tpress.js`, `tpay.js` green.
+Client-facing proof: `Modern Dry Cleaners - Print Fix (receipt).pdf` (before/after + 3 steps + tuning table).
+
+### Client ko batana
+Print dialog mein **Scale = Default (100%)**, **Margins = None/Minimum**, paper = **80mm Roll** —
+yeh teen cheezein browser ki taraf se hain, code unhe control nahi kar sakta.

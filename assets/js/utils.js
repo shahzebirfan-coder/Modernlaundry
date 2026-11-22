@@ -352,11 +352,12 @@ async function printElement(elementOrSelector, options) {
   await Promise.all(imagePromises);
 
   // Step 2b: thermal printers cannot render emoji — strip them
-  let paper = '80', marginMm = 2, isThermal = true;
+  let paper = '80', marginMm = 2, isThermal = true, rawPaperMm = 0;
   try {
     const st = (typeof DB !== 'undefined' && DB.settings) ? DB.settings() : {};
     paper = st.invoicePaper === '58' ? '58' : '80';
     marginMm = (st.invoiceMarginMm != null) ? Math.max(0, Math.min(10, +st.invoiceMarginMm)) : 2;
+    rawPaperMm = (+st.invoiceRawPaperMm || 0);   // printer ki asli paper width (agar user ne set ki)
     isThermal = (options.paper !== 'laser') && (st.invoicePaper !== 'laser');
   } catch (e) {}
   if (isThermal) thermalCleanTextNodes(clone);
@@ -477,6 +478,36 @@ img {
   image-rendering: -webkit-optimize-contrast;
   -ms-interpolation-mode: nearest-neighbor;
 }
+/* === PAPER EDGE SAFETY =================================================
+   Thermal drivers (Windows "POS-80" etc.) often report a printable width
+   SMALLER than the roll (72mm on an 80mm roll). The slip used a fixed
+   max-width (360px) and nowrap totals, so the right column — amounts —
+   was printed past the paper edge and got cut off.
+   Rules below keep every line inside whatever width the driver gives us. */
+html, body, #printArea, #printArea * {
+  max-width: 100% !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  white-space: normal !important;
+}
+.invoice-page, .inv-slip {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+/* table ki columns PIN karein — warna lambi value (date / naam / phone)
+   table ko paper se bahar khinch leti hai aur right side ka amount kat jata hai */
+table { width: 100% !important; max-width: 100% !important; table-layout: fixed !important; }
+table td, table th { overflow-wrap: anywhere !important; word-break: break-word !important; }
+table td:first-child, table th:first-child { width: 55% !important; }
+table td:last-child, table th:last-child { width: 45% !important; }
+/* amount cells right-aligned; lamba ho to next line par (paper ke andar reh kar) */
+table td:last-child, td:last-child, .amt, .amount { text-align: right !important; white-space: normal !important; }
+div, span, tr, td { box-sizing: border-box !important; }
+img, canvas, svg { max-width: 100% !important; height: auto !important; }
+
 /* Thermal brand logo: physical size in mm, never wider than the paper */
 .inv-logo {
   max-width: 100% !important;
@@ -495,16 +526,25 @@ table { width: 100%; border-collapse: collapse; }
 .print-slip:last-child { page-break-after: auto; break-after: auto; }
 .print-page-break { page-break-after: always; break-after: page; height: 0; }
 @media print {
-  @page { size: ${paper}mm auto; margin: ${marginMm}mm; }
+  /* page ka apna margin 0 — side ka space hum khud body padding se dete hain,
+     warna driver ka margin + hamara margin dono lag kar paper tang ho jata hai */
+  @page { size: ${rawPaperMm || paper}mm auto; margin: 0 !important; }
   /* "Save as PDF" on an 80mm roll used to open a full A4 page with the slip
      squeezed into one corner. A fixed, roll-sized page keeps the PDF identical
      to the printed receipt. */
   html { width: 100%; }
-  html, body {
+  html {
     width: ${paper === '58' ? '58mm' : '80mm'} !important;
     max-width: ${paper === '58' ? '58mm' : '80mm'} !important;
   }
-  body { padding: 0 !important; background: #fff !important; }
+  body {
+    /* agar printer ki asli width pata hai to wohi use karein, warna roll width */
+    width: ${rawPaperMm ? '${rawPaperMm}mm' : (paper === '58' ? '58mm' : '80mm')} !important;
+    max-width: ${rawPaperMm ? '${rawPaperMm}mm' : (paper === '58' ? '58mm' : '80mm')} !important;
+    padding: ${Math.max(1, marginMm)}mm !important;   /* dono taraf barabar ka safe margin */
+    margin: 0 auto !important;
+    background: #fff !important;
+  }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   .invoice-page {
     padding: 0 !important;

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'modern-dry-cleaners-pos-v42';
+const CACHE_NAME = 'modern-dry-cleaners-pos-v43';
 const urlsToCache = [
   './',
   './index.html',
