@@ -351,7 +351,25 @@ function renderLogin() {
       u = await DB.login(f.get('username').trim(), f.get('password'));
     }
 
-    if (!u) { toast(t('login.invalid') || 'Invalid username or password', 'error'); return; }
+    if (!u) {
+      // Batao ke masla kya hai: username hi ghalat hai ya password
+      const known = DB.all('users').some(x => String(x.username || '').toLowerCase() === String(f.get('username') || '').trim().toLowerCase());
+      if (!known) {
+        toast('❌ Yeh username is system mein nahi hai — spelling check karein', 'error');
+      } else {
+        toast('❌ Password ghalat hai — "Forgot Password?" → Vendor Recovery Code se ek dafa login karein', 'error', 9000);
+      }
+      return;
+    }
+
+    /* Temporary password (vendor recovery) → naya password lazmi set karein */
+    let forceChg = null;
+    try { forceChg = JSON.parse(localStorage.getItem('mdcForcePwdChange') || 'null'); } catch (e) {}
+    if (forceChg && String(forceChg.user).toLowerCase() === String(u.username).toLowerCase()) {
+      openForcedPasswordChange(u);
+      return;
+    }
+
     toast(`Welcome, ${u.name}!`, 'success');
 
     // Branded boot screen while the workspace loads.
@@ -371,3 +389,41 @@ function renderLogin() {
     }, MOUNT_DELAY);
   };
 }
+
+/* ========== FORCED PASSWORD CHANGE ==========
+   Vendor recovery code se temp password mila → login ke foran baad naya password. */
+function openForcedPasswordChange(u) {
+  openModal(`
+    <h3>🔑 Naya password set karein</h3>
+    <p class="sub">Temporary password se login hua hai. Ab apna naya password set karein — agli dafa isi se login hoga.</p>
+
+    <div class="field">
+      <label>Naya Password *</label>
+      <input type="text" id="fpcNew" placeholder="Kam az kam 6 characters" autofocus/>
+    </div>
+    <div class="field">
+      <label>Dobara likhein *</label>
+      <input type="text" id="fpcNew2" placeholder="Same as above"/>
+    </div>
+    <div id="fpcMsg" style="font-size:13px;margin:8px 0;"></div>
+
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="fpcSave">💾 Save & Login</button>
+    </div>
+  `, { onOpen(m) {
+    const msg = (t, c = 'var(--danger)') => { $('#fpcMsg', m).innerHTML = `<div style="color:${c};">${escapeHtml(t)}</div>`; };
+    $('#fpcSave').onclick = async () => {
+      const a = $('#fpcNew', m).value, b = $('#fpcNew2', m).value;
+      if (a.length < 6) { msg('Password kam az kam 6 characters ka ho'); return; }
+      if (a !== b) { msg('Dono password ek jaise nahi hain'); return; }
+      if (window.MDC_VAULT) await MDC_VAULT.set(u.username, a);
+      try { localStorage.removeItem('mdcForcePwdChange'); } catch (e) {}
+      closeModal();
+      toast('✅ Naya password set ho gaya', 'success');
+      const target = u.role === 'admin' ? 'dashboard' : 'pos';
+      if (window.BOOT) BOOT.show({ min: 900, status: 'Signing in as ' + (u.name || u.username) });
+      setTimeout(() => { app.go(target); if (window.BOOT) BOOT.hide(); }, 260);
+    };
+  }});
+}
+window.openForcedPasswordChange = openForcedPasswordChange;

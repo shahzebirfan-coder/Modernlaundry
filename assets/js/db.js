@@ -32,6 +32,7 @@ const BRAND = (function () {
     logoImage:  'assets/img/brand-logo.png',   // bundled Modern Dry Cleaners lockup
     logoSquare: 'assets/img/logo.png',         // square icon (app / PWA)
     timingText: cfg.shopTimingText || '',
+    termsText:  cfg.invoiceTerms   || '',
     color:      cfg.brandColor       || '#0b3f80',
     accent:     cfg.brandColorAccent || '#0e9ad2'
   };
@@ -117,8 +118,21 @@ const DB = {
       if (this._data.settings && logoIsBundled) {
         this._data.settings.logoImage = BRAND.logoImage;
       }
+      /* ---- Timings + Terms: client ki latest values (idempotent) ----
+         Owner Settings/Invoice Customize se badal sakta hai; is liye hum sirf
+         tab overwrite karte hain jab value khali ho, purani default ho,
+         ya owner ne khud kabhi badli na ho (termsCustom / timingsCustom). */
       if (this._data.settings && BRAND.timingText) {
-        this._data.settings.shopTimingText = this._data.settings.shopTimingText || BRAND.timingText;
+        const st = this._data.settings;
+        const legacyTimings = !st.shopTimingText || /1:00 PM|2:00 PM - 7:30 PM|8:00 AM/i.test(st.shopTimingText);
+        if (!st.timingsCustom || legacyTimings) st.shopTimingText = BRAND.timingText;
+      }
+      if (this._data.settings && BRAND.termsText) {
+        const st = this._data.settings;
+        const legacyTerms = !st.invoiceTerms
+          || /non-refundable/i.test(st.invoiceTerms)
+          || st.invoiceTerms.trim().length < 40;
+        if (!st.termsCustom || legacyTerms) st.invoiceTerms = BRAND.termsText;
       }
       // Always refresh the bundled (un-locked) brand assets
       if (this._data.settings) {
@@ -312,7 +326,9 @@ const DB = {
         invoiceShowNotes: true,
         invoiceShowFooter: true,
         invoiceShowEditedBadge: true,
-        invoiceTerms: 'Items not collected within 30 days are non-refundable.',
+        invoiceTerms: (typeof CLIENT_CONFIG !== 'undefined' && CLIENT_CONFIG.invoiceTerms)
+          ? CLIENT_CONFIG.invoiceTerms
+          : 'Items not collected within 30 days are non-refundable.',
         invoiceShowTerms: false,
         // Office-copy & WhatsApp settings
         printDualCopy: true,           // when true, prints customer + office copy together

@@ -78,7 +78,7 @@ function renderSettings() {
           <div class="form-row cols-1">
             <div class="field">
               <label>Shop Timings (printed on invoices &amp; portal)</label>
-              <textarea id="sTimings" rows="4" style="font-family:inherit;font-size:12.5px;">${escapeHtml(s.shopTimingText||'')}</textarea>
+              <textarea id="sTimings" rows="6" style="font-family:inherit;font-size:12.5px;">${escapeHtml(s.shopTimingText||'')}</textarea>
               <small style="color:var(--text-soft);">Winter / Summer timings + Sunday closed. Leave blank to hide.</small>
             </div>
           </div>
@@ -401,6 +401,7 @@ function renderSettings() {
       currency: $('#sCurrency').value.trim() || 'Rs.',
       address: $('#sAddr').value.trim(),
       shopTimingText: ($('#sTimings')?.value || '').trim(),
+      timingsCustom: true,
       taxPercent: Math.max(0, +$('#sTax').value || 0),
       baseUrl: $('#sBase').value.trim(),
       invoiceFooter: $('#sFooter').value.trim(),

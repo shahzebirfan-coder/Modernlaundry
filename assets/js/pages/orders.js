@@ -45,7 +45,7 @@ function renderOrders() {
       <table class="tbl">
         <thead><tr>
           <th>${t('ord.invoice')}</th><th>${t('ord.customer')}</th><th>${t('ord.items')}</th><th>${t('ord.total')}</th><th>${t('ord.paid')}</th>
-          <th>${t('ord.status')}</th><th>${t('ord.booked')}</th><th>${t('ord.delivery')}</th><th>${t('ord.actions')}</th>
+          <th>${t('ord.status')}</th><th>${t('ord.booked')}</th><th>${t('ord.delivery')}</th><th title="Payment kab mili">Paid On</th><th>${t('ord.actions')}</th>
         </tr></thead>
         <tbody id="ordersBody"></tbody>
       </table>
@@ -95,6 +95,18 @@ function filteredOrders() {
   });
 }
 
+/* Payment ki tareekh: sab se aakhri payment (ya "not paid") */
+function lastPaymentDate(o) {
+  const log = Array.isArray(o.paymentsLog) ? o.paymentsLog : [];
+  if (log.length) {
+    const last = log.slice().sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))[0];
+    if (last && last.at) return last.at;
+  }
+  if ((o.paid || 0) > 0) return o.paidAt || o.createdAt || '';
+  return '';
+}
+window.lastPaymentDate = lastPaymentDate;
+
 function renderOrdersBody() {
   const filtered = filteredOrders();
 
@@ -112,7 +124,7 @@ function renderOrdersBody() {
   `;
 
   if (!filtered.length) {
-    $('#ordersBody').innerHTML = `<tr><td colspan="9"><div class="empty"><div class="emoji">📦</div><h4>${t('ord.noOrders')}</h4><p>${t('ord.tryClearing')}</p></div></td></tr>`;
+    $('#ordersBody').innerHTML = `<tr><td colspan="10"><div class="empty"><div class="emoji">📦</div><h4>${t('ord.noOrders')}</h4><p>${t('ord.tryClearing')}</p></div></td></tr>`;
     return;
   }
 
@@ -121,7 +133,9 @@ function renderOrdersBody() {
     const invNo = DB.invoiceLabel(o);
     return `<tr>
       <td><b>${escapeHtml(invNo)}</b>${o.isCredit?`<br><span class="badge due">CREDIT</span>`:''}${o.paymentType==='advance'?`<br><span class="badge" style="background:#dcfce7;color:#065f46;">🟢 ADVANCE</span>`:''}</td>
-      <td><b>${escapeHtml(c.name)}</b><br><small style="color:var(--text-soft);">${escapeHtml(c.phone||'')}</small></td>
+      <td><b>${escapeHtml(c.name)}</b>
+        ${DB.currentUser().role === 'admin' ? `<button class="btn btn-ghost btn-sm" data-act="editcust" data-id="${o.customerId}" title="Name / phone theek karein" style="padding:0 4px;font-size:11px;">✏️</button>` : ''}
+        <br><small style="color:var(--text-soft);">${escapeHtml(c.phone||'—')}</small></td>
       <td>${o.items.length} items<br><b style='color:var(--primary);'>${o.items.reduce((s,i)=>s+(i.qty||0),0)} pcs</b>${o.deliveryType?` <span class='badge' style='background:#f3f4f6;color:#374151;'>${o.deliveryType==='hanger'?'🧥':o.deliveryType==='fold'?'📦':'🧺'} ${o.deliveryType}</span>`:''}</td>
       <td><b>${fmtMoney(o.total)}</b></td>
       <td>
@@ -136,6 +150,15 @@ function renderOrdersBody() {
       </td>
       <td>${fmtDateShort(o.createdAt)}</td>
       <td>${escapeHtml(o.deliveryDate || '-')}</td>
+      <td>${(() => {
+        const at = (typeof lastPaymentDate === 'function') ? lastPaymentDate(o) : '';
+        if (!at) return '<span style="color:#94a3b8;font-size:12px;">—</span>';
+        const d = new Date(at);
+        const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+        const age = days <= 0 ? 'aaj' : (days === 1 ? 'kal' : days + ' din pehle');
+        return `<b style="font-size:12.5px;">${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</b>
+                <br><small style="color:var(--text-soft);">${d.toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit'})} · ${age}</small>`;
+      })()}</td>
       <td>
         <button class="btn btn-secondary btn-sm" data-act="view" data-id="${o.id}" title="${t('ord.viewInv')}">👁️</button>
         <button class="btn btn-secondary btn-sm" data-act="status" data-id="${o.id}" title="${t('ord.updateStatus')}">🔄</button>
@@ -159,6 +182,7 @@ function renderOrdersBody() {
     else if (b.dataset.act === 'receive') openReceivePayment(id);
     else if (b.dataset.act === 'wa') openWhatsAppPicker(id);
     else if (b.dataset.act === 'edit') openEditInvoice(id);
+    else if (b.dataset.act === 'editcust') openEditCustomerQuick(id);
     else if (b.dataset.act === 'photos') openOrderPhotos(id);
     else if (b.dataset.act === 'del') {
       if (typeof confirmVoidWithReason === 'function') {
@@ -357,6 +381,17 @@ function openEditInvoice(orderId) {
         <input type="text" inputmode="numeric" pattern="[0-9]*" id="eDiscVal" value="${o.discountValue||0}" autocomplete="off" style="text-align:right;font-weight:700;"/>
       </div>
     </div>
+    <div class="form-row cols-2" style="background:#fff1f2;border:1px dashed #ef4444;border-radius:8px;padding:10px;margin-bottom:10px;">
+      <div class="field">
+        <label style="color:#991b1b;">📋 Purana Baqi <span style="font-weight:400;font-size:11px;">(previous balance)</span></label>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="ePrevBal" value="${+(o.prevBalance||0)}" autocomplete="off" style="text-align:right;font-weight:700;"/>
+      </div>
+      <div class="field">
+        <label style="color:#991b1b;">Is bill ka total</label>
+        <input type="text" id="eCurBill" value="" readonly style="text-align:right;font-weight:700;background:#fef2f2;"/>
+      </div>
+    </div>
+
     <div class="form-row">
       <div class="field">
         <label>🚚 ${escapeHtml(DB.deliveryChargeLabel())} <span style="font-weight:400;font-size:11px;color:var(--text-soft);">(after discount)</span></label>
@@ -409,13 +444,17 @@ function openEditInvoice(orderId) {
       const discVal = +$('#eDiscVal', m).value || 0;
       const disc = discType === 'percent' ? Math.round(subtotal * discVal / 100) : discVal;
       const delCh = Math.max(0, Math.round(+($('#eDelCharge', m) ? $('#eDelCharge', m).value : 0) || 0));
-      const total = Math.max(0, subtotal - disc) + delCh;   // delivery charge is added AFTER the discount
+      const curBill = Math.max(0, subtotal - disc) + delCh;   // delivery charge is added AFTER the discount
+      const prevBal = Math.max(0, Math.round(+($('#ePrevBal', m) ? $('#ePrevBal', m).value : 0) || 0));
+      const total = curBill + prevBal;                        // purana baqi grand total me
       const paid = Math.min(total, +$('#ePaid', m).value || 0);
       const due = total - paid;
+      if ($('#eCurBill', m)) $('#eCurBill', m).value = fmtMoney(curBill);
       $('#eTotals', m).innerHTML = `
         Subtotal: ${fmtMoney(subtotal)} •
         Discount: − ${fmtMoney(disc)} •
         ${delCh > 0 ? `🚚 ${escapeHtml(DB.deliveryChargeLabel())}: + ${fmtMoney(delCh)} • ` : ''}
+        ${prevBal > 0 ? `📋 Purana Baqi: + ${fmtMoney(prevBal)} • ` : ''}
         <b>Total: ${fmtMoney(total)}</b> •
         Paid: ${fmtMoney(paid)} •
         ${due>0?`<span style="color:var(--danger);">Due: ${fmtMoney(due)}</span>`:'<span style="color:var(--success);">Paid in Full ✅</span>'}
@@ -459,6 +498,7 @@ function openEditInvoice(orderId) {
         onChange: () => calcAndShow()
       });
       window.easyNumber($('#eDelCharge', m), { min: 0, onChange: () => calcAndShow() });
+      if ($('#ePrevBal', m)) window.easyNumber($('#ePrevBal', m), { min: 0, onChange: () => calcAndShow() });
       window.easyNumber($('#ePaid', m), { min: 0, onChange: () => calcAndShow() });
     }
     $('#eDiscType', m).onchange = calcAndShow;
@@ -480,7 +520,9 @@ function openEditInvoice(orderId) {
       const discVal = +$('#eDiscVal', m).value || 0;
       const disc = discType === 'percent' ? Math.round(subtotal * discVal / 100) : Math.min(subtotal, discVal);
       const delCharge = Math.max(0, Math.round(+$('#eDelCharge', m).value || 0));
-      const total = Math.max(0, subtotal - disc) + delCharge;   // charge after discount
+      const prevBal = Math.max(0, Math.round(+($('#ePrevBal', m) ? $('#ePrevBal', m).value : 0) || 0));
+      const curBill = Math.max(0, subtotal - disc) + delCharge;   // charge after discount
+      const total = curBill + prevBal;
       const paid = Math.min(total, +$('#ePaid', m).value || 0);
       const due = total - paid;
 
@@ -493,7 +535,7 @@ function openEditInvoice(orderId) {
         items, subtotal, discountType: discType, discountValue: discVal,
         deliveryCharge: delCharge,
         discount: disc, manualDiscount: disc, loyaltyDiscount: 0, loyaltyPercent: 0,
-        tax: 0, total, paid, due, isCredit: due > 0,
+        tax: 0, currentBill: curBill, prevBalance: prevBal, total, paid, due, isCredit: due > 0,
         status: $('#eStatus', m).value,
         deliveryDate: $('#eDelivery', m).value,
         paymentMethod: $('#ePayMethod', m).value,
@@ -507,6 +549,84 @@ function openEditInvoice(orderId) {
     };
   }});
 }
+
+/* ===================== CUSTOMER QUICK EDIT (from invoice list) =====================
+   Invoice ban jane ke baad bhi customer ka naam / number theek ho sake.
+   Sirf admin — aur har change log hota hai (kis invoice se, kaun, kab). */
+function openEditCustomerQuick(customerId) {
+  if (!customerId) return;
+  if (DB.currentUser().role !== 'admin') { toast('Admin access only', 'error'); return; }
+  const c = DB.get('customers', customerId);
+  if (!c) { toast('Customer not found', 'error'); return; }
+
+  const orders = DB.all('orders').filter(o => o.customerId === customerId);
+  const invList = orders.map(o => DB.invoiceLabel(o)).join(', ');
+
+  openModal(`
+    <h3>✏️ Customer Edit — ${escapeHtml(c.name)}</h3>
+    <p class="sub">Naam ya number ghalat ho gaya? Yahan se theek karein — sab invoices par asar hoga
+       (${orders.length} invoice${orders.length === 1 ? '' : 's'}).</p>
+
+    <div class="field">
+      <label>Customer Name *</label>
+      <input id="ecName" value="${escapeHtml(c.name || '')}"/>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Contact Number <span style="font-weight:400;font-size:11px;color:var(--text-soft);">(optional)</span></label>
+        <input id="ecPhone" value="${escapeHtml(c.phone || '')}" placeholder="03XX-XXXXXXX"/>
+      </div>
+      <div class="field">
+        <label>Address</label>
+        <input id="ecAddr" value="${escapeHtml(c.address || '')}"/>
+      </div>
+    </div>
+
+    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 12px;border-radius:8px;font-size:12px;color:#92400e;margin:10px 0;">
+      ⚠️ Yeh change <b>${orders.length}</b> invoice par lagay ga. Purani copy me ghalat naam hai to
+      woh invoice dobara print karein. Change activity log me record hoga.
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="ecSave">💾 Save</button>
+    </div>
+  `, { onOpen(m) {
+    $('#ecSave', m).onclick = () => {
+      const name = $('#ecName', m).value.trim();
+      const phone = $('#ecPhone', m).value.trim();
+      const address = $('#ecAddr', m).value.trim();
+      if (!name) { toast('Name khali nahi ho sakta', 'error'); return; }
+
+      /* duplicate phone check (kisi doosre customer ke sath clash na ho) */
+      if (phone) {
+        const clash = DB.all('customers').find(x => x.id !== customerId && String(x.phone || '').replace(/\D/g,'') === phone.replace(/\D/g,''));
+        if (clash) { toast(`Yeh number pehle se "${clash.name}" ke naam par hai`, 'error'); return; }
+      }
+
+      const before = { name: c.name, phone: c.phone || '', address: c.address || '' };
+      DB.update('customers', customerId, { name, phone, address });
+
+      /* audit */
+      try {
+        DB._data.auditLog = DB._data.auditLog || [];
+        DB._data.auditLog.push({
+          id: 'a' + Date.now().toString(36), action: 'customer.edit',
+          details: `Name: ${before.name} → ${name} | Phone: ${before.phone || '-'} → ${phone || '-'} | Invoices: ${orders.length}`,
+          userId: DB.currentUser().id, username: DB.currentUser().username,
+          userName: DB.currentUser().name, role: DB.currentUser().role,
+          timestamp: new Date().toISOString(), createdAt: new Date().toISOString()
+        });
+        DB.save();
+      } catch (e) {}
+
+      closeModal();
+      toast('✅ Customer details update ho gaye', 'success');
+      if (typeof renderOrdersBody === 'function') renderOrdersBody();
+    };
+  }});
+}
+window.openEditCustomerQuick = openEditCustomerQuick;
 
 /* ===================== DEDICATED RECEIVE PAYMENT ===================== */
 /* Customer ek invoice slip lekar shop pe aaya, payment deni hai

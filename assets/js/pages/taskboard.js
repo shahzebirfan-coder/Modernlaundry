@@ -82,12 +82,25 @@ function renderTaskBoardData() {
     const inv = DB.invoiceLabel(o);
     const totalPcs = o.items.reduce((s,it) => s + it.qty, 0);
     const itemNames = o.items.map(it => `${it.name} ×${it.qty}`).join(', ');
+    const cust = DB.get('customers', o.customerId) || { name: 'Walk-in', phone: '' };
+    const waNum = (() => {
+      let ph = String(cust.phone || '').replace(/[^\d+]/g, '');
+      if (ph.startsWith('+')) ph = ph.substring(1);
+      if (ph.startsWith('0') && ph.length === 11) ph = '92' + ph.substring(1);
+      return ph;
+    })();
+    const waMsg = encodeURIComponent(`Assalam-o-Alaikum ${cust.name}, aap ka order ${inv} ${cust.name ? '' : ''}— abhi taiyar nahi hua. Hum jald inform karenge. — ${DB.settings().shopName || 'Modern Dry Cleaners'}`);
 
     return `
-      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-        <div>
-          <div style="font-weight:900;font-size:16px;color:#0f172a;margin-bottom:4px;">${inv}</div>
-          <div style="font-size:13px;color:#475569;"><b>${totalPcs} pcs</b> (${escapeHtml(itemNames)})</div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+        <div style="min-width:0;">
+          <div style="font-weight:900;font-size:16px;color:#0f172a;margin-bottom:2px;">${inv}</div>
+          <div style="font-size:14px;font-weight:700;color:#0b3f80;">👤 ${escapeHtml(cust.name || 'Walk-in')}</div>
+          <div style="font-size:12.5px;color:#334155;">
+            ${cust.phone ? `📞 <b>${escapeHtml(cust.phone)}</b>` : '<span style="color:#94a3b8;">no number</span>'}
+            ${waNum ? `<a href="https://wa.me/${waNum}?text=${waMsg}" target="_blank" title="WhatsApp" style="text-decoration:none;margin-left:4px;">📱</a>` : ''}
+          </div>
+          <div style="font-size:13px;color:#475569;margin-top:3px;"><b>${totalPcs} pcs</b> (${escapeHtml(itemNames)})</div>
           <div style="font-size:12px;color:${delColor};font-weight:bold;margin-top:4px;">Delivery: ${o.deliveryDate ? escapeHtml(o.deliveryDate) : 'Not Set'}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;">
@@ -134,9 +147,10 @@ function printTaskBoard() {
         return `
           <div style="border-bottom:1px solid #aaa;padding:6px 0;margin-bottom:4px;page-break-inside:avoid;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div style="font-size:16px;font-weight:900;">[ ] ${inv}</div>
-              <div style="font-size:13px;font-weight:bold;">${totalPcs} pcs</div>
+              <div style="font-size:15px;font-weight:900;">[ ] ${inv}</div>
+              <div style="font-size:12px;font-weight:bold;">${totalPcs} pcs</div>
             </div>
+            <div style="font-size:12px;font-weight:bold;">${escapeHtml((DB.get('customers', o.customerId) || {}).name || 'Walk-in')}${(DB.get('customers', o.customerId) || {}).phone ? ' · ' + escapeHtml(DB.get('customers', o.customerId).phone) : ''}</div>
             <div style="font-size:12px;margin-top:4px;">
               ${o.items.map(it => `${it.qty}x ${escapeHtml(it.name)}`).join(', ')}
             </div>

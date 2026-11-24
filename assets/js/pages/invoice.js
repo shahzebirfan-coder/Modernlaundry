@@ -7,10 +7,12 @@ function openInvoice(orderId, autoPrint) {
   const s = DB.settings();
   const invoiceNo = DB.invoiceLabel(o);
   const totalPcs = (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  /* Packaging labels — thermal printer par emoji dabba ban jata hai, is liye TEXT ONLY.
+     Client: "Hanger, Fold ya Mix wagera show ho" — bara aur saaf. */
   const delTypeMap = {
-    hanger: { icon: '🧥', label: 'HANGER' },
-    fold:   { icon: '📦', label: 'FOLD' },
-    both:   { icon: '🧺', label: 'BOTH / MIXED' }
+    hanger: { icon: '', label: 'HANGER' },
+    fold:   { icon: '', label: 'FOLD' },
+    both:   { icon: '', label: 'MIXED' }
   };
   const delTypeInfo = delTypeMap[(o.deliveryType||'').toLowerCase()] || delTypeMap.hanger;
 
@@ -27,10 +29,15 @@ function openInvoice(orderId, autoPrint) {
         <button class="btn btn-secondary btn-sm" id="photosBtn" title="Manage order photos (for disputes)">📷 Photos${(o.photos&&o.photos.length)?` (${o.photos.length})`:''}</button>
         ${c.phone ? `<button class="btn btn-success btn-sm" id="waBtn" title="Send invoice via WhatsApp">📱 WhatsApp</button>` : ''}
         ${DB.currentUser().role==='admin' ? `<button class="btn btn-secondary btn-sm" id="customizeInv">⚙️ Customize</button><button class="btn btn-warning btn-sm" id="editFromInv">✏️ Edit</button>`:''}
+        <button class="btn btn-success btn-sm" id="pdfBtn" title="Invoice PDF — WhatsApp par bhejein">📄 PDF</button>
         <button class="btn btn-secondary btn-sm" id="printCustomerOnly" title="Print only customer copy">🖨️ Customer Only</button>
         <button class="btn btn-primary btn-sm" id="printBoth" title="Print customer + office copy together">🖨️🖨️ Print Both</button>
         <button class="btn btn-ghost btn-sm" onclick="closeModal()">Close</button>
       </div>
+    </div>
+    <div class="no-print" style="font-size:11px;color:var(--text-soft);margin:-6px 0 10px;">
+      Print dialog mein <b>Scale = Default (100%)</b> rakhein (Custom 65% mat karein) · <b>Margins = None/Minimum</b> · Paper = <b>80mm Roll</b>.
+      Agar "More settings / See more" na khule: <b>Ctrl + Shift + P</b> dabayein.
     </div>
 
     ${dualCopy ? `
@@ -63,6 +70,11 @@ function openInvoice(orderId, autoPrint) {
     if (photosBtn) photosBtn.onclick = () => { closeModal(); openOrderPhotos(o.id); };
     const waBtn = $('#waBtn', m);
     if (waBtn) waBtn.onclick = () => sendWhatsAppInvoice(o, c, s, invoiceNo, totalPcs, delTypeInfo);
+    const pb = $('#pdfBtn', m);
+    if (pb) pb.onclick = () => {
+      if (window.openInvoicePdfMenu) window.openInvoicePdfMenu(o.id);
+      else toast('PDF module load nahi hua — Ctrl+Shift+R dabayein', 'error');
+    };
     $('#printCustomerOnly', m).onclick = () => doPrint(false);
     $('#printBoth', m).onclick = () => doPrint(dualCopy);
     if (autoPrint) setTimeout(() => doPrint(dualCopy), 300);
@@ -113,9 +125,31 @@ function doPrint(includeOffice) {
    ============================================================ */
 let _invLogoPromise = null;   // guards against re-rendering in a loop
 
+/* CelineSoft credit — invoice ke aakhir par (client ki requirement) */
+function buildDeveloperCredit(s) {
+  /* Thermal (1-bit) par dark background wala logo black dabba ban jata hai —
+     is liye transparent/thermal-safe PNG use hoti hai (sirf safe logo art). */
+  return `<div class="dev-credit" style="margin-top:8px;padding-top:6px;border-top:1px dashed #000;text-align:center;">
+    <img class="dev-logo" src="assets/img/celinesoft-thermal.png" alt="CelineSoft"
+         style="display:block;margin:0 auto 3px;width:58%;max-width:34mm;height:auto;"/>
+    <div style="font-size:8px;font-weight:800;letter-spacing:.2px;line-height:1.35;color:#000;">
+      Designed &amp; Developed by: <b>CelineSoft</b><br>
+      Contact: <b>0302-8244803</b>
+    </div>
+  </div>`;
+}
+
+/* LOGO — client ki requirement: brand logo EVERY invoice par must hai.
+   Agar custom logo na ho to bundled Modern Dry Cleaners logo use hota hai. */
+function invoiceLogoSrc(s) {
+  const custom = (s && s.logoImage) ? String(s.logoImage).trim() : '';
+  if (custom && !/^assets\/img\/logo\.(png|jpe?g)$/i.test(custom)) return custom;
+  return 'assets/img/brand-logo.png';       // bundled MDC lockup — hamesha mojood
+}
+
 function buildInvoiceLogo(s, width, fontSize) {
-  // No logo uploaded → print the shop name big, as before
-  if (!s.logoImage) {
+  /* logo hamesha — custom, warna bundled brand logo */
+  if (!invoiceLogoSrc(s)) {
     return `<div style="text-align:center;font-size:${fontSize+18}px;font-weight:900;line-height:1.2;">${escapeHtml(s.shopName)}</div>`;
   }
   ensureThermalLogo();
@@ -130,7 +164,7 @@ function buildInvoiceLogo(s, width, fontSize) {
     try { info = THERMAL.info(s); } catch (e) { info = null; }   // sync; warms cache if missing
   }
 
-  const src = (mono && info) ? info.dataUrl : s.logoImage;
+  const src = (mono && info) ? info.dataUrl : invoiceLogoSrc(s);
 
   // mm sizing keeps the print predictable; the processed bitmap is 1 dot = 1 printer dot.
   const wMm = info ? info.mm : null;
@@ -201,13 +235,19 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
   const showFooter = s.invoiceShowFooter !== false;
   const showEdited = s.invoiceShowEditedBadge !== false;
   const showQtyCircle = s.invoiceQtyCircle !== false;
-  const showTerms = s.invoiceShowTerms === true;
+  /* Terms client ki requirement: default ON (setting se band ki ja sakti hai) */
+  const showTerms = s.invoiceShowTerms !== false;
   // Thermal sizing: 58mm rolls have far less room, so step the type down
   const narrow = (s.invoicePaper === '58');
   const fontSize = narrow
     ? Math.max(11, Math.min(20, (+s.invoiceFontSize || 13)))
     : Math.max(12, Math.min(24, (+s.invoiceFontSize || 13) + 2));
   const width = Math.max(280, Math.min(800, +s.invoiceWidth || 360));
+
+  /* Invoice number / pieces / packaging ke liye bare font — email wale chhote fonts ki jagah */
+  const invoiceNoSize = narrow ? Math.round(fontSize * 2.3) : Math.round(fontSize * 2.6);
+  const piecesSize   = narrow ? Math.round(fontSize * 2.4) : Math.round(fontSize * 2.6);
+  const packSize     = narrow ? Math.round(fontSize * 1.3) : Math.round(fontSize * 1.45);
 
   const itemsHtml = (o.items || []).map(it => `
     <tr>
@@ -216,7 +256,8 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
     </tr>
   `).join('');
 
-  const logoBlock = showLogo ? buildInvoiceLogo(s, width, fontSize) : '';
+  /* Client ki requirement: BRAND logo invoice par MUST hai — setting se band nahi hota */
+  const logoBlock = buildInvoiceLogo(s, width, fontSize);
 
   const totalDisc = (o.discount || ((o.manualDiscount||0) + (o.loyaltyDiscount||0)));
   const discountLines = showDiscount ? `
@@ -245,31 +286,34 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
       
       <div style="text-align:center;font-size:${narrow ? fontSize : fontSize+2}px;font-weight:900;margin:12px 0;letter-spacing:${narrow ? '0' : '1px'};color:#000;padding:6px 0;white-space:nowrap;border-top:2px dashed #000;border-bottom:2px dashed #000;">★ CUSTOMER COPY ★</div>
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <div style="display:inline-block;background:#fff;color:#000;border:2px solid #000;border-radius:10px;padding:8px 14px;flex:1;margin-right:12px;text-align:center;">
-          <div style="font-size:${fontSize-2}px;font-weight:800;letter-spacing:1px;">INVOICE NO.</div>
-          <div style="font-size:${fontSize+12}px;font-weight:900;line-height:1.2;letter-spacing:1px;">${invoiceNo}</div>
-        </div>
+      <!-- INVOICE NO. — BARA, BOLD, CENTER (client ki requirement) -->
+      <div style="border:3px solid #000;border-radius:10px;padding:6px 6px 8px;margin:0 0 8px;text-align:center;background:#fff;">
+        <div style="font-size:${Math.max(9, fontSize-3)}px;font-weight:900;letter-spacing:2px;line-height:1.2;">INVOICE NO.</div>
+        <div class="nw inv-big-no" style="font-size:${invoiceNoSize}px;font-weight:900;line-height:1.05;letter-spacing:1px;white-space:nowrap;">${invoiceNo}</div>
+      </div>
+
+      <!-- PIECES + PACKAGING — dono bare aur saaf -->
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
         ${showQtyCircle ? `
-          <div style="border:2px solid #000;border-radius:50%;min-width:70px;height:70px;display:flex;flex-direction:column;justify-content:center;align-items:center;background:#fff;color:#000;">
-            <div style="font-size:${fontSize+10}px;font-weight:900;line-height:1;">${totalPcs}</div>
-            <div style="font-size:${fontSize-4}px;font-weight:800;line-height:1;margin-top:2px;">PCS</div>
+          <div style="flex:1;border:3px solid #000;border-radius:10px;padding:4px 0 6px;text-align:center;background:#fff;">
+            <div style="font-size:${Math.max(8, fontSize-3)}px;font-weight:900;letter-spacing:1px;">PIECES</div>
+            <div style="font-size:${piecesSize}px;font-weight:900;line-height:1.05;">${totalPcs}</div>
+          </div>
+        ` : ''}
+        ${showDelType ? `
+          <div style="flex:1.2;border:3px solid #000;border-radius:10px;padding:4px 2px 6px;text-align:center;background:#fff;">
+            <div style="font-size:${Math.max(8, fontSize-3)}px;font-weight:900;letter-spacing:1px;">PACKAGING</div>
+            <div style="font-size:${packSize}px;font-weight:900;line-height:1.15;white-space:nowrap;">${delTypeInfo.label}</div>
           </div>
         ` : ''}
       </div>
 
-      ${showDelType ? `
-        <div style="text-align:center;margin-bottom:16px;">
-          <span style="font-size:${fontSize+2}px;font-weight:900;border:2px solid #000;border-radius:16px;padding:6px 20px;display:inline-block;">${delTypeInfo.icon} ${delTypeInfo.label}</span>
-        </div>
-      ` : ''}
-
       <table style="font-size:${fontSize+1}px;width:100%;border-collapse:collapse;margin-bottom:12px;line-height:1.5;">
         <tr><td style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Booking Date</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;">${fmtDate(o.createdAt)}</td></tr>
-        ${o.deliveryDate? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Delivery Date</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;color:#000;"><b>${escapeHtml(o.deliveryDate)}</b></td></tr>`:''}
+        ${o.deliveryDate? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Delivery Date</td><td class="nw" style="text-align:right;padding:6px 0;border-top:1px dashed #000;color:#000;"><b>${escapeHtml(o.deliveryDate)}</b></td></tr>`:''}
         ${showCashier ? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Cashier</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;">${escapeHtml(cashier.name)}</td></tr>`:''}
         <tr><td style="padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+2}px;font-weight:bold;">Customer</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+3}px;"><b>${escapeHtml(c.name)}</b></td></tr>
-        ${c.phone? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+2}px;font-weight:bold;">Phone</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+3}px;"><b>${escapeHtml(c.phone)}</b></td></tr>`:''}
+        ${c.phone? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+2}px;font-weight:bold;">Phone</td><td class="nw" style="text-align:right;padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+3}px;"><b>${escapeHtml(c.phone)}</b></td></tr>`:''}
       </table>
 
       ${showItems ? `
@@ -285,6 +329,7 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
       <table style="font-size:${fontSize+2}px;width:100%;border-collapse:collapse;line-height:1.5;">
         <tr style="border-top:2px solid #000;"><td style="padding:8px 0;font-weight:bold;">Gross Total</td><td style="text-align:right;padding:8px 0;font-weight:bold;font-size:${fontSize+4}px;">${fmtMoney(o.subtotal)}</td></tr>
         ${discountLines}
+        ${+(o.prevBalance||0) > 0 ? `<tr><td style="padding:6px 0;font-weight:bold;">Purana Baqi <span style="font-weight:400;font-size:${fontSize-1}px;">(prev. balance)</span></td><td style="text-align:right;padding:6px 0;font-weight:bold;">+ ${fmtMoney(o.prevBalance)}</td></tr>` : ''}
         ${o.tax>0?`<tr><td style="padding:6px 0;">Tax</td><td style="text-align:right;padding:6px 0;">${fmtMoney(o.tax)}</td></tr>`:''}
         ${chargeLine(fontSize)}
         ${(totalDisc>0 || charge > 0)?`<tr style="border-top:1px dashed #000;"><td style="padding:8px 0;font-weight:900;font-size:${fontSize+4}px;">NET TOTAL</td><td style="text-align:right;padding:8px 0;font-weight:900;font-size:${fontSize+6}px;white-space:nowrap;">${fmtMoney(o.total)}</td></tr>`:''}
@@ -294,15 +339,27 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
       </table>
 
       ${showNotes && o.notes?`<div style="font-size:${fontSize}px;font-weight:bold;margin-top:16px;padding:8px;border:2px dashed #000;">📝 ${escapeHtml(o.notes)}</div>`:''}
-      ${showTerms && s.invoiceTerms?`<div style="font-size:${fontSize-1}px;text-align:center;margin-top:16px;padding-top:12px;border-top:2px dashed #000;font-weight:bold;">${escapeHtml(s.invoiceTerms)}</div>`:''}
+      ${showTerms && s.invoiceTerms ? (() => {
+        const raw = String(s.invoiceTerms).trim();
+        const lines = raw.split('\n').map(x => x.trim()).filter(Boolean);
+        const isList = lines.some(l => /^\d+[.)]\s/.test(l));
+        if (!isList) {
+          return `<div style="font-size:${fontSize-1}px;text-align:center;margin-top:14px;padding-top:10px;border-top:2px dashed #000;font-weight:bold;white-space:pre-wrap;">${escapeHtml(raw)}</div>`;
+        }
+        const head = lines.find(l => !/^\d+[.)]\s/.test(l)) || 'TERMS & CONDITIONS';
+        const items = lines.filter(l => /^\d+[.)]\s/.test(l));
+        return `<div class="inv-terms" style="margin-top:14px;padding-top:10px;border-top:2px dashed #000;">
+          <div class="inv-terms-head" style="text-align:center;font-weight:900;font-size:${fontSize}px;letter-spacing:.6px;margin-bottom:6px;">${escapeHtml(head)}</div>
+          <div class="inv-terms-body" style="font-size:${Math.max(7, fontSize-2)}px;line-height:1.42;">
+            ${items.map(t => `<div style="margin-bottom:2.5px;"><b>${escapeHtml(t.match(/^\d+/)[0])}.</b> ${escapeHtml(t.replace(/^\d+[.)]\s*/, ''))}</div>`).join('')}
+          </div>
+        </div>`;
+      })() : ''}
       
       ${showQR ? `<div style="text-align:center;margin-top:20px;"><canvas class="invQR"></canvas></div>` : ''}
-            ${showFooter && s.shopTimingText ? `<div style="text-align:center;font-size:${fontSize-1}px;font-weight:700;margin-top:12px;padding-top:8px;border-top:2px dashed #000;white-space:pre-wrap;line-height:1.45;">${escapeHtml(s.shopTimingText)}</div>` : ''}
+            ${showFooter && s.shopTimingText ? `<div class="block-wide" style="text-align:center;font-size:${Math.max(7, fontSize-2)}px;font-weight:700;margin-top:9px;padding-top:7px;border-top:1px dashed #000;white-space:pre-wrap;line-height:1.35;">${escapeHtml(s.shopTimingText)}</div>` : ''}
       ${showFooter ? `<div style="text-align:center;font-size:${fontSize+2}px;font-weight:900;margin-top:16px;">${escapeHtml(s.invoiceFooter || '')}</div>` : ''}
-      <div style="text-align:center; margin-top:15px; font-size:12px; color:#000; font-family:sans-serif;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle; margin-right:4px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-        <span style="vertical-align:middle; font-weight:bold;">Powered by CelineSoft</span>
-      </div>
+      ${buildDeveloperCredit(s)}
     </div>
   `;
 }
@@ -310,81 +367,91 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
    OFFICE COPY (Page 2 — Compact, paper-saving)
    ============================================================ */
 function buildOfficeSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
-  const width = Math.max(220, Math.min(400, +s.officeCopyWidth || 280));
-  const fontSize = Math.max(10, Math.min(20, (+s.officeCopyFontSize || 11) + 2));
+  /* OFFICE COPY — apni ALAG page par (customer copy se poori tarah juda).
+     Bara saaf format: shop ka record, items, amounts, purana baqi, credit. */
+  const fontSize = Math.max(11, Math.min(18, (+s.officeCopyFontSize || 11) + 3));
 
-  /* Pickup & delivery charges — printed after the discount, same as the customer copy */
   const charge = Math.max(0, Math.round(+(o.deliveryCharge != null ? o.deliveryCharge : o.deliveryFee) || 0));
   const chargeName = o.deliveryChargeLabel
     || (typeof DB !== 'undefined' && DB.deliveryChargeLabel ? DB.deliveryChargeLabel() : 'Delivery Charges');
+  const disc = (o.discount || ((o.manualDiscount || 0) + (o.loyaltyDiscount || 0))) || 0;
+  const prevBal = Math.max(0, +(o.prevBalance || 0));
+  const thermalInfo = (typeof THERMAL !== 'undefined' && THERMAL.info) ? (() => { try { return THERMAL.info(s); } catch (e) { return null; } })() : null;
+  const logoSrc = (thermalInfo && s.invoiceLogoMono !== false) ? thermalInfo.dataUrl : invoiceLogoSrc(s);
+
+  const kv = (k, v, big, nowrap) => `<tr>
+      <td style="border:1px solid #000;padding:6px 8px;font-weight:800;font-size:${fontSize - 1}px;">${k}</td>
+      <td class="${nowrap ? 'nw' : ''}" style="border:1px solid #000;padding:6px 8px;${big ? `font-size:${fontSize + 1}px;font-weight:900;` : ''}">${v}</td>
+    </tr>`;
 
   return `
     <div class="invoice-page invoice-office" style="max-width:100%;font-size:${fontSize}px;padding:10px;background:#fff;">
-      ${s.invoiceShowLogo !== false ? `
       <div style="text-align:center;margin-bottom:6px;">
-        <img class="inv-logo inv-logo-office" src="${THERMAL && THERMAL.info(s) ? THERMAL.info(s).dataUrl : s.logoImage}"
-             alt="${escapeHtml(s.shopName)}"
-             style="${THERMAL && THERMAL.info(s) ? `width:${Math.round(THERMAL.info(s).mm * 0.55 * 10) / 10}mm;max-width:${Math.round(THERMAL.info(s).mm * 0.55 * 10) / 10}mm;max-height:${Math.round(THERMAL.info(s).mmH * 0.55 * 10) / 10}mm;` : 'max-width:110px;'}height:auto;object-fit:contain;background:#fff;display:block;margin:0 auto;image-rendering:pixelated;"/>
-      </div>` : ''}
-      <div style="text-align:center;font-weight:900;font-size:${fontSize+8}px;margin-bottom:8px;color:#000;line-height:1.2;">
-        ${escapeHtml(s.shopName)}
+        <img class="inv-logo inv-logo-office" src="${logoSrc}" alt="${escapeHtml(s.shopName)}"
+             style="max-width:${thermalInfo ? Math.round(thermalInfo.mm * 0.75 * 10) / 10 + 'mm' : '130px'};max-height:${thermalInfo ? Math.round(thermalInfo.mmH * 0.75 * 10) / 10 + 'mm' : '90px'};height:auto;object-fit:contain;background:#fff;display:block;margin:0 auto;"/>
       </div>
-      <div style="text-align:center;font-weight:900;font-size:${fontSize+2}px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;color:#000;">
-        <hr style="flex:1; border:none; border-top:2px solid #000; margin-right:8px;">
+      <div style="text-align:center;font-weight:900;font-size:${fontSize + 8}px;line-height:1.2;color:#000;">${escapeHtml(s.shopName)}</div>
+      ${s.phone || s.address ? `<div style="text-align:center;font-size:${fontSize - 1}px;color:#000;">${escapeHtml(s.phone || '')}${s.phone && s.address ? ' · ' : ''}${escapeHtml(s.address || '')}</div>` : ''}
+
+      <div style="text-align:center;font-weight:900;font-size:${fontSize + 2}px;margin:8px 0;padding:5px 0;border-top:2px solid #000;border-bottom:2px solid #000;color:#000;letter-spacing:1px;">
         OFFICE COPY
-        <hr style="flex:1; border:none; border-top:2px solid #000; margin-left:8px;">
       </div>
 
-      <div style="text-align:center;margin-bottom:16px;">
-        <div style="display:inline-block;background:#fff;color:#000;border:2px solid #000;border-radius:10px;padding:8px 24px;">
-          <div style="font-size:${fontSize}px;font-weight:800;letter-spacing:1px;margin-bottom:2px;">INVOICE NO.</div>
-          <div style="font-size:${fontSize+14}px;font-weight:900;line-height:1.1;">${invoiceNo}</div>
+      <div style="border:3px solid #000;border-radius:8px;padding:5px 6px 7px;text-align:center;margin-bottom:8px;">
+        <div style="font-size:${Math.max(9, fontSize-2)}px;font-weight:900;letter-spacing:2px;">INVOICE NO.</div>
+        <div class="nw" style="font-size:${Math.round(fontSize * 2.2)}px;font-weight:900;line-height:1.05;white-space:nowrap;">${invoiceNo}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;text-align:center;">
+        <div style="flex:1;border:2px solid #000;border-radius:8px;padding:3px 0 5px;">
+          <div style="font-size:${Math.max(8, fontSize-3)}px;font-weight:900;">PIECES</div>
+          <div style="font-size:${Math.round(fontSize * 1.9)}px;font-weight:900;line-height:1.05;">${totalPcs}</div>
+        </div>
+        <div style="flex:1.2;border:2px solid #000;border-radius:8px;padding:3px 2px 5px;">
+          <div style="font-size:${Math.max(8, fontSize-3)}px;font-weight:900;">PACKAGING</div>
+          <div style="font-size:${Math.round(fontSize * 1.2)}px;font-weight:900;white-space:nowrap;">${delTypeInfo.label}</div>
         </div>
       </div>
 
-      <table style="font-size:${fontSize+1}px;width:100%;border-collapse:collapse;border:2px solid #000;margin-bottom:14px;background:#fff;line-height:1.5;">
-        <tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">Booked:</td><td style="border:1px solid #000;padding:6px 8px;">${fmtDateShort(o.createdAt)}</td></tr>
-        ${o.deliveryDate? `<tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">Delivery:</td><td style="border:1px solid #000;padding:6px 8px;color:#000;"><b>${escapeHtml(o.deliveryDate)}</b></td></tr>`:''}
-        <tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">Customer:</td><td style="border:1px solid #000;padding:6px 8px;font-size:${fontSize+3}px;"><b>${escapeHtml(c.name)}</b></td></tr>
-        ${c.phone? `<tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">Phone:</td><td style="border:1px solid #000;padding:6px 8px;font-size:${fontSize+2}px;"><b>${escapeHtml(c.phone)}</b></td></tr>`:''}
-        <tr><td style="border:1px solid #000;padding:6px 8px;font-weight:bold;">By:</td><td style="border:1px solid #000;padding:6px 8px;">${escapeHtml(cashier.name)}</td></tr>
+      <table class="kv" style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+        ${kv('Booked', fmtDate(o.createdAt), false, true)}
+        ${o.deliveryDate ? kv('Delivery', `<b>${escapeHtml(o.deliveryDate)}</b>`, false, true) : ''}
+        ${kv('Customer', `<b>${escapeHtml(c.name || 'Walk-in')}</b>`, true)}
+        ${c.phone ? kv('Phone', `<b>${escapeHtml(c.phone)}</b>`, false, true) : ''}
+        ${kv('Cashier', escapeHtml(cashier.name))}
       </table>
 
-      <div style="display:flex;gap:8px;margin-bottom:16px;">
-        <div style="flex:1;border:2px solid #000;border-radius:6px;overflow:hidden;display:flex;flex-direction:column;background:#fff;">
-          <div style="background:#fff;border-bottom:2px solid #000;color:#000;text-align:center;font-size:${fontSize}px;padding:6px 0;font-weight:900;">PIECES</div>
-          <div style="text-align:center;font-size:${fontSize+10}px;font-weight:900;padding:8px 0;">${totalPcs}</div>
-        </div>
-        <div style="flex:2;border:2px solid #000;border-radius:6px;overflow:hidden;display:flex;flex-direction:column;background:#fff;">
-          <div style="background:#fff;border-bottom:2px solid #000;color:#000;text-align:center;font-size:${fontSize}px;padding:6px 0;font-weight:900;">PACKAGING</div>
-          <div style="text-align:center;font-size:${fontSize+4}px;font-weight:900;padding:8px 0;display:flex;align-items:center;justify-content:center;gap:4px;">
-             ${delTypeInfo.icon} ${delTypeInfo.label}
-          </div>
-        </div>
-      </div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+        <tr style="border-top:2px solid #000;border-bottom:2px solid #000;">
+          <td style="padding:6px 0;font-weight:900;font-size:${fontSize + 1}px;">ITEMS</td>
+          <td style="text-align:right;padding:6px 0;font-weight:900;font-size:${fontSize + 1}px;">AMOUNT</td>
+        </tr>
+        ${(o.items || []).map(it => `<tr>
+          <td style="padding:5px 0;font-weight:700;">${escapeHtml(it.name)}
+            <span style="font-weight:400;font-size:${fontSize - 1}px;">(${it.qty} × ${fmtMoney(it.price)})</span></td>
+          <td style="text-align:right;padding:5px 0;font-weight:800;">${fmtMoney(it.qty * it.price)}</td>
+        </tr>`).join('')}
+      </table>
 
-      <div style="border:2px solid #000; border-radius:6px; padding:10px; background:#fff;">
-        <table style="font-size:${fontSize+2}px;width:100%;border-collapse:collapse;line-height:1.5;">
-          ${(o.items || []).map(it => `
-            <tr><td style="padding:6px 0;font-weight:bold;">${escapeHtml(it.name)} <span style="font-size:${fontSize+4}px;float:right;">×${it.qty}</span></td></tr>
-          `).join('')}
-        </table>
-        <div style="border-top:2px solid #000; margin-top:8px; padding-top:8px;">
-          <table style="font-size:${fontSize+3}px;width:100%;border-collapse:collapse;line-height:1.5;">
-            <tr><td style="padding:4px 0;">Gross</td><td style="text-align:right;padding:4px 0;font-weight:bold;">${fmtMoney(o.subtotal)}</td></tr>
-            ${(o.discount||((o.manualDiscount||0)+(o.loyaltyDiscount||0)))>0 ? `<tr><td style="padding:4px 0;font-size:${fontSize+1}px;font-weight:900;color:#000;">Discount</td><td style="text-align:right;padding:4px 0;font-size:${fontSize+1}px;font-weight:900;color:#000;">-${fmtMoney(o.discount||((o.manualDiscount||0)+(o.loyaltyDiscount||0)))}</td></tr>` : ''}
-            ${charge > 0 ? `<tr><td style="padding:4px 0;font-weight:900;word-break:break-word;padding-right:6px;">${escapeHtml(chargeName)}</td><td style="text-align:right;padding:4px 0;font-weight:900;white-space:nowrap;">+${fmtMoney(charge)}</td></tr>` : ''}
-            <tr><td style="padding:4px 0;font-weight:900;">Net Total</td><td style="text-align:right;padding:4px 0;font-weight:900;white-space:nowrap;">${fmtMoney(o.total)}</td></tr>
-            <tr><td style="padding:4px 0;">Paid</td><td style="text-align:right;padding:4px 0;font-weight:bold;white-space:nowrap;">${fmtMoney(o.paid)}</td></tr>
-            ${o.due>0?`<tr><td style="padding:4px 0;color:#000;font-weight:900;">Due</td><td style="text-align:right;padding:4px 0;color:#000;font-weight:900;white-space:nowrap;">${fmtMoney(o.due)}</td></tr>`:''}
-          </table>
-        </div>
-      </div>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:5px 0;font-weight:800;">Gross Total</td><td style="text-align:right;padding:5px 0;font-weight:800;">${fmtMoney(o.subtotal)}</td></tr>
+        ${disc > 0 ? `<tr><td style="padding:5px 0;font-weight:800;">Discount</td><td style="text-align:right;padding:5px 0;font-weight:800;">− ${fmtMoney(disc)}</td></tr>` : ''}
+        ${prevBal > 0 ? `<tr><td style="padding:5px 0;font-weight:800;">Purana Baqi (previous)</td><td style="text-align:right;padding:5px 0;font-weight:800;">+ ${fmtMoney(prevBal)}</td></tr>` : ''}
+        ${charge > 0 ? `<tr><td style="padding:5px 0;font-weight:800;">${escapeHtml(chargeName)}</td><td style="text-align:right;padding:5px 0;font-weight:800;">+ ${fmtMoney(charge)}</td></tr>` : ''}
+        <tr style="border-top:2px solid #000;">
+          <td style="padding:7px 0;font-weight:900;font-size:${fontSize + 3}px;">NET TOTAL</td>
+          <td style="text-align:right;padding:7px 0;font-weight:900;font-size:${fontSize + 3}px;">${fmtMoney(o.total)}</td>
+        </tr>
+        <tr><td style="padding:5px 0;font-weight:800;">Paid</td><td style="text-align:right;padding:5px 0;font-weight:800;">${fmtMoney(o.paid)}</td></tr>
+        ${(o.due || 0) > 0 ? `<tr><td style="padding:6px 0;font-weight:900;font-size:${fontSize + 2}px;">DUE</td><td style="text-align:right;padding:6px 0;font-weight:900;font-size:${fontSize + 2}px;">${fmtMoney(o.due)}</td></tr>` : ''}
+      </table>
 
-      ${s.invoiceShowQR !== false ? `<div style="text-align:center;margin-top:16px;"><canvas class="invQR" style="max-width:90px;"></canvas></div>`:''}
+      ${s.invoiceShowQR !== false ? `<div style="text-align:center;margin-top:10px;"><canvas class="invQR" style="max-width:80px;"></canvas></div>` : ''}
+
+      ${buildDeveloperCredit(s)}
     </div>
   `;
 }
+
 /* ============================================================
    WHATSAPP INVOICE
    ============================================================ */
@@ -445,7 +512,8 @@ Delivery: {delivery} ({type})
       <textarea id="waMsg" rows="14" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;">${escapeHtml(msg)}</textarea>
     </div>
     <div style="background:var(--surface-alt);padding:10px;border-radius:8px;font-size:12px;color:var(--text-soft);margin-bottom:14px;">
-      💡 Clicking <b>Send</b> opens WhatsApp Web (on PC) or the WhatsApp app (on phone) with this message pre-filled. You just need to press the send arrow there.
+      💡 <b>Send</b> dabane par WhatsApp khulega, message pehle se bhara hua — sirf send dabana hai.
+      <br>📄 <b>PDF bhejna hai?</b> Invoice screen par <b>📄 PDF</b> button dabayein (phone par seedha WhatsApp share, PC par download).
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -613,7 +681,7 @@ function openInvoiceCustomizer(reopenOrderId) {
     <div class="form-row cols-1">
       <div class="field">
         <label>📜 Short Terms on Receipt <small style="color:var(--text-soft);font-weight:400;">(keep short to save paper!)</small></label>
-        <textarea id="cfTerms" rows="2" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;">${escapeHtml(s.invoiceTerms||'')}</textarea>
+        <textarea id="cfTerms" rows="10" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;line-height:1.5;">${escapeHtml(s.invoiceTerms||'')}</textarea>
       </div>
     </div>
     <div class="form-row cols-1">
@@ -714,6 +782,7 @@ function openInvoiceCustomizer(reopenOrderId) {
         invoiceMarginMm: +($('#cfMargin', m).value || 0),
         invoiceFooter: $('#cfFooter', m).value,
         invoiceTerms: $('#cfTerms', m).value,
+        termsCustom: true,
         portalTerms: $('#cfPortalTerms', m).value,
         printDualCopy: $('#cfDual', m).checked,
         officeCopyWidth: +$('#cfOffW', m).value || 280,

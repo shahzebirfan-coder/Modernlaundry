@@ -105,6 +105,15 @@ function openForgotPassword() {
         <div>→</div>
       </button>
 
+      <button class="recovery-option" data-method="vendorcode">
+        <div style="font-size:28px;">🔓</div>
+        <div style="flex:1;text-align:left;">
+          <div style="font-weight:700;">Vendor Recovery Code</div>
+          <small style="color:var(--text-soft);">IT owner ka one-time code (internet ki zaroorat nahi)</small>
+        </div>
+        <div>→</div>
+      </button>
+
       <button class="recovery-option" data-method="contact">
         <div style="font-size:28px;">📞</div>
         <div style="flex:1;text-align:left;">
@@ -136,12 +145,145 @@ function openForgotPassword() {
         closeModal();
         setTimeout(() => {
           if (method === 'security') openSecurityQuestionRecovery();
+          else if (method === 'vendorcode') openVendorRecoveryCode();
           else if (method === 'master') openMasterCodeRecovery();
           else if (method === 'backup') openBackupRecovery();
           else if (method === 'contact') showAdminContactInfo();
         }, 150);
       };
     });
+  }});
+}
+
+/* ========== 2z. VENDOR RECOVERY CODE (offline, one-time) ==========
+   IT owner apni private key se code banata hai; app sirf public key se check karta hai.
+   Client ko internet / Firebase / Master code ki zaroorat nahi. */
+function openVendorRecoveryCode() {
+  if (!window.MDC_RECOVERY) { toast('Recovery module load nahi hua — naya build kholein', 'error'); return; }
+
+  openModal(`
+    <h3>🔓 Vendor Recovery Code</h3>
+    <p class="sub">IT owner se mile code se ek dafa login karein. Code sirf <b>is computer</b> aur <b>ek dafa</b> chalta hai.</p>
+
+    <div class="field">
+      <label>Username</label>
+      <input id="vrUser" placeholder="admin" autofocus/>
+      <small style="color:var(--text-soft);">POS user ka username (jaise admin) — ya IT Admin password ke liye <b>itadmin</b> likhein.</small>
+    </div>
+
+    <div class="field">
+      <label>Recovery Code</label>
+      <input id="vrCode" placeholder="MDC1.xxxxx.yyyyy" style="font-family:monospace;font-size:12px;"/>
+      <small style="color:var(--text-soft);">Poora code copy-paste karein (MDC1. se shuru hota hai).</small>
+    </div>
+
+    <div id="vrMsg" style="margin:10px 0;font-size:13px;"></div>
+
+    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:10px;border-radius:8px;font-size:12px;">
+      ℹ️ Code aap ke computer ka hota hai. Doosre PC par kaam nahi karega.<br>
+      IT owner ko yeh tag bhejein: <b id="vrTag" style="font-family:monospace;">…</b>
+      <button class="btn btn-ghost btn-sm" id="vrCopyTag" style="margin-left:6px;">Copy</button>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="vrGo">Unlock →</button>
+    </div>
+  `, { onOpen(m) {
+    const msg = (txt, type = '') => {
+      const colors = { error: 'var(--danger)', success: 'var(--success)', '': 'var(--text-soft)' };
+      $('#vrMsg', m).innerHTML = `<div style="padding:8px;background:var(--surface-alt);border-radius:6px;color:${colors[type]};">${escapeHtml(txt)}</div>`;
+    };
+    const go = async () => {
+      const un = $('#vrUser', m).value.trim();
+      const code = $('#vrCode', m).value.trim();
+      if (!un || !code) { msg('Username aur code dono chahiye', 'error'); return; }
+
+      /* IT Admin password ka koi username nahi hota — sirf "itadmin" likh kar unlock kar sakte hain */
+      const isIT = un.toLowerCase() === 'itadmin';
+      let u = null;
+      if (isIT) {
+        u = { id: 'itadmin', username: 'itadmin', name: 'IT Admin Password', role: 'it' };
+      } else {
+        u = DB.all('users').find(x => String(x.username).toLowerCase() === un.toLowerCase());
+        if (!u) { msg('❌ Yeh username is PC par mojood nahi (IT password ke liye "itadmin" likhein)', 'error'); return; }
+      }
+
+      $('#vrGo').disabled = true;
+      const res = await MDC_RECOVERY.verifyCode(code, u.username);
+      $('#vrGo').disabled = false;
+
+      if (!res.ok) {
+        msg('❌ ' + res.reason, 'error');
+        try {
+          DB._data.auditLog = DB._data.auditLog || [];
+          DB._data.auditLog.push({
+            id: 'a' + Date.now().toString(36), action: 'recovery.failed',
+            details: 'Vendor code failed: ' + res.reason, username: u.username,
+            userName: u.name, role: u.role,
+            timestamp: new Date().toISOString(), createdAt: new Date().toISOString()
+          });
+          DB.save();
+        } catch (e) {}
+        return;
+      }
+
+      /* ✅ verified → temporary password */
+      const temp = MDC_RECOVERY.tempPassword();
+      MDC_RECOVERY.markUsed(res.sig);
+
+      if (isIT) {
+        /* IT Admin slot — POS login nahi, sirf settings ka taala */
+        if (window.MDC_CODE_VAULT) await MDC_CODE_VAULT.set('itadmin', temp);
+      } else {
+        if (window.MDC_VAULT) await MDC_VAULT.set(u.username, temp);
+        try { localStorage.setItem('mdcForcePwdChange', JSON.stringify({ user: u.username, at: Date.now() })); } catch (e) {}
+      }
+      try {
+        DB._data.auditLog = DB._data.auditLog || [];
+        DB._data.auditLog.push({
+          id: 'a' + Date.now().toString(36), action: 'recovery.vendorCode',
+          details: 'Vendor recovery code used', userId: u.id, username: u.username,
+          userName: u.name, role: u.role,
+          timestamp: new Date().toISOString(), createdAt: new Date().toISOString()
+        });
+        DB.save();
+      } catch (e) {}
+
+      closeModal();
+      setTimeout(() => {
+        openModal(`
+          <h3>✅ Code accepted</h3>
+          <p class="sub">${isIT
+            ? 'Ab Settings → 🔐 Password & Credential Security → <b>Change IT Admin Password</b> mein yeh temporary password daal kar apna naya password set karein.'
+            : 'Ab is temporary password se login karein, phir app foran naya password set karne ko kahega.'}</p>
+          <div style="background:#ecfdf5;border:2px solid #34d399;border-radius:10px;padding:14px;text-align:center;margin-bottom:12px;">
+            <div style="font-size:11px;color:var(--text-soft);letter-spacing:1px;">USERNAME</div>
+            <div style="font-family:monospace;font-size:16px;font-weight:700;">${escapeHtml(u.username)}</div>
+            <div style="font-size:11px;color:var(--text-soft);letter-spacing:1px;margin-top:8px;">TEMPORARY PASSWORD</div>
+            <div style="font-family:monospace;font-size:22px;font-weight:800;letter-spacing:1px;">${escapeHtml(temp)}</div>
+          </div>
+          <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:10px;border-radius:8px;font-size:12px;">
+            ⚠️ ${isIT
+              ? 'Yeh POS login nahi hai — sirf Settings/Cloud/GDrive ka taala kholta hai. Foran naya password set karein.'
+              : 'Login ke baad naya password set karna zaroori hai — yeh temp password kaam nahi karega.'}
+          </div>
+          <div class="modal-footer"><button class="btn btn-primary" onclick="closeModal()">Samajh gaya</button></div>
+        `);
+      }, 200);
+    };
+    /* device tag dikhao — IT owner isi tag ke liye code banata hai */
+    MDC_RECOVERY.deviceTag().then(tag => {
+      const el = $('#vrTag', m); if (el) el.textContent = tag;
+      const cp = $('#vrCopyTag', m);
+      if (cp) cp.onclick = () => {
+        try { navigator.clipboard.writeText(tag); toast('Tag copy ho gaya', 'success'); }
+        catch (e) { toast('Copy nahi hua — tag likh lein: ' + tag, 'warning'); }
+      };
+    });
+
+    $('#vrGo').onclick = go;
+    $('#vrCode', m).addEventListener('keyup', (e) => { if (e.key === 'Enter') go(); });
   }});
 }
 
@@ -632,6 +774,7 @@ function openMasterCodeSetup() {
 
 /* Make global */
 window.openAdminResetPassword = openAdminResetPassword;
+window.openVendorRecoveryCode = openVendorRecoveryCode;
 window.openForgotPassword = openForgotPassword;
 window.openSecurityQuestionRecovery = openSecurityQuestionRecovery;
 window.openMasterCodeRecovery = openMasterCodeRecovery;

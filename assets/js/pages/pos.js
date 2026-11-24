@@ -5,6 +5,7 @@ let posState = {
   discountType: 'fixed',   // 'fixed' or 'percent'
   discountValue: 0,
   deliveryCharge: 0,        // pickup & delivery charges — added AFTER discount
+  prevBalance: 0,           // PURANA BAQI (register se) — invoice ke sath add hota hai
   activeCategory: 'all',
   search: ''
 };
@@ -163,10 +164,15 @@ function calcCartTotals() {
      subtotal, so a percentage discount can never eat into them. */
   const deliveryCharge = Math.max(0, Math.round(+(posState.deliveryCharge) || 0));
   const taxOnCharge = (DB.settings().deliveryChargeTaxable === true) ? Math.round(deliveryCharge * taxPercent / 100) : 0;
-  const total = taxable + tax + deliveryCharge + taxOnCharge;
+  const currentBill = taxable + tax + deliveryCharge + taxOnCharge;
+
+  /* PURANA BAQI — customer ke pichle khule invoices ka jama.
+     Grand total me add hota hai; paid isi total me se ghata kar due nikalta hai. */
+  const prevBalance = Math.max(0, Math.round(+(posState.prevBalance) || 0));
+  const total = currentBill + prevBalance;
 
   return { subtotal, manualDiscount, loyaltyDiscount, loyaltyPercent, totalDiscount, tax, taxPercent,
-           deliveryCharge, taxOnCharge, total };
+           deliveryCharge, taxOnCharge, currentBill, prevBalance, total };
 }
 
 function renderCart() {
@@ -317,6 +323,20 @@ function renderCart() {
     <div id="sumChargeLine" style="display:${tot.deliveryCharge>0?'block':'none'};">
       <div class="row" style="color:#b45309;font-weight:700;"><span id="sumChargeLbl">🚚 ${escapeHtml(DB.deliveryChargeLabel())}</span><span id="sumChargeAmt">${fmtMoney(tot.deliveryCharge)}</span></div>
     </div>
+    <!-- PURANA BAQI (register se) -->
+    <div style="background:#fff1f2;border:1px dashed #ef4444;border-radius:8px;padding:8px;margin:6px 0;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:12px;flex:1;color:#991b1b;font-weight:700;">📋 Purana Baqi <span style="font-weight:400;">(optional)</span></span>
+        <input type="text" inputmode="numeric" pattern="[0-9]*" id="prevBalInput" value="${posState.prevBalance || ''}" placeholder="0" autocomplete="off"
+               style="width:96px;text-align:right;font-size:15px;font-weight:700;padding:8px 10px;border:2px solid #ef4444;border-radius:8px;background:#fff;"/>
+      </div>
+      <div id="prevBalHint" style="font-size:10.5px;color:#b91c1c;margin-top:4px;display:${posState.prevBalance>0?'block':'none'};">
+        ${posState.prevBalance>0?`Purana baqi ${fmtMoney(posState.prevBalance)} grand total me shamil hai.`:''}
+      </div>
+    </div>
+    <div id="sumPrevLine" style="display:${tot.prevBalance>0?'block':'none'};">
+      <div class="row" style="color:#b91c1c;font-weight:700;"><span>📋 Purana Baqi</span><span id="sumPrevAmt">${fmtMoney(tot.prevBalance)}</span></div>
+    </div>
     <div class="row" style="border-top:1px dashed var(--border);margin-top:6px;padding-top:6px;"></div>
     <div class="row total"><span>Total</span><span class="v" id="sumTotal">${fmtMoney(tot.total)}</span></div>
     <button class="btn btn-primary btn-block btn-lg" id="checkoutBtn" style="margin-top:10px;">${window.t('pos.bookOrderArrow')}</button>
@@ -332,12 +352,14 @@ function renderCart() {
     set('#sumTaxAmt', fmtMoney(t2.tax));
     set('#sumTaxLbl', `Tax (${t2.taxPercent}%)`);
     set('#sumChargeAmt', fmtMoney(t2.deliveryCharge));
+    set('#sumPrevAmt', fmtMoney(t2.prevBalance));
     set('#sumTotal', fmtMoney(t2.total));
     const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? 'block' : 'none'; };
     show('#sumDiscLine', t2.manualDiscount > 0);
     show('#sumLoyLine', t2.loyaltyDiscount > 0);
     show('#sumTaxLine', t2.taxPercent > 0);
     show('#sumChargeLine', t2.deliveryCharge > 0);
+    show('#sumPrevLine', t2.prevBalance > 0);
   };
 
   /* Shared helper (utils.js) — click par poora value select, seedha type */
@@ -383,11 +405,46 @@ function renderCart() {
         onChange: (v) => { posState.deliveryCharge = v; paintMoney(calcCartTotals()); }
       });
     }
+    /* --- purana baqi (typed by staff) --- */
+    const pb = $('#prevBalInput');
+    if (pb) {
+      easyNumber(pb, {
+        min: 0,
+        onChange: (v) => { posState.prevBalance = v; paintMoney(calcCartTotals()); if ($('#prevBalHint')) $('#prevBalHint').style.display = v > 0 ? 'block' : 'none'; }
+      });
+    }
     $('#checkoutBtn').onclick = openBookingForm;
   };
   $('#cartSummary').innerHTML = summaryHtml(tot);
   bindSummary();
 }
+
+/* ===== PURANA BAQI (Previous Balance) =====
+   Client ka masla: kal se software start ho raha hai, purane customers ke balance
+   register me hain. Har invoice par "previous remaining balance" add ho sake, aur
+   agli dafa system KHUD bata de ke is customer ka purana baqi kitna hai.
+
+   Model (simple aur reliable):
+     • Har order par `due` = us invoice ka baqi (paid kam hone par khud ghatta hai).
+     • Customer ka PURANA BAQI = us ke tamam chalu orders ke `due` ka jama.
+     • Naye order par purana baqi `prevBalance` me save hota hai aur
+       `total` (grand total) me add ho jata hai:
+            total = currentBill + prevBalance
+            due   = total − paid
+       Is liye ledger / reports / dashboard sab pehle ki tarah sahi rehte hain.
+*/
+function customerOpenBalance(customerId, excludeOrderId) {
+  if (!customerId || customerId === 'cu1') return 0;
+  let bal = 0;
+  (DB.all('orders') || []).forEach(o => {
+    if (o.customerId !== customerId) return;
+    if (excludeOrderId && o.id === excludeOrderId) return;
+    if (o.status === 'cancelled') return;
+    bal += Math.max(0, +(o.due || 0));
+  });
+  return Math.round(bal);
+}
+window.customerOpenBalance = customerOpenBalance;
 
 /* ===== CUSTOMER PICKER ===== */
 function openCustomerPicker() {
@@ -444,10 +501,22 @@ function openBookingForm() {
     <h3>📝 ${t('book.title')}</h3>
     <p class="sub">Fill customer & delivery details, then choose payment.</p>
 
+    <!-- Purana baqi reminder (jab customer chuna jaye) -->
+    <div id="prevBalBanner" style="display:none;background:#fee2e2;border-left:4px solid #ef4444;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;color:#991b1b;font-weight:700;">
+      ⚠️ <span id="prevBalTxt"></span>
+      <button type="button" class="btn btn-danger btn-sm" id="addPrevBalBtn" style="margin-top:6px;display:block;">➕ Add to this invoice</button>
+    </div>
+
     <!-- Booking Info -->
     <div style="background:var(--surface-alt);border-radius:10px;padding:14px;margin-bottom:14px;">
       <div style="font-size:12px;color:var(--text-soft);margin-bottom:4px;">📅 ${t('book.bookingDate')} (auto)</div>
       <div style="font-weight:700;font-size:15px;">${todayStr}</div>
+      ${DB.currentUser().role === 'admin' ? `
+      <div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:10px;">
+        <label style="font-size:12px;font-weight:700;color:#0b3f80;display:block;margin-bottom:4px;">🔙 Purani tareekh (backdate) — sirf Admin</label>
+        <input type="date" id="bBackDate" max="${isoDay()}" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;"/>
+        <div style="font-size:11px;color:var(--text-soft);margin-top:4px;">Khali chhorein = aaj ki tareekh. Bijli/internet band tha to purani invoice isi se banayein.</div>
+      </div>` : ''}
     </div>
 
     <!-- Customer Form -->
@@ -456,7 +525,7 @@ function openBookingForm() {
     </div>
     <div class="form-row">
       <div class="field" style="position:relative;">
-        <label>Contact Number *</label>
+        <label>Contact Number <span style="font-weight:400;color:var(--text-soft);font-size:11px;">(optional)</span></label>
         <input id="bCustPhone" value="${escapeHtml(cust.phone||'')}" placeholder="03XX-XXXXXXX" autocomplete="off"/>
         <div id="custSuggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);max-height:280px;overflow-y:auto;z-index:1000;margin-top:4px;"></div>
       </div>
@@ -571,6 +640,7 @@ function openBookingForm() {
       <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;"><span>Amount after discount</span><span id="bAfterDisc">${fmtMoney(tot.subtotal - tot.totalDiscount)}</span></div>
       ${tot.tax>0?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-soft);"><span>+ Tax (${tot.taxPercent}%)</span><span>${fmtMoney(tot.tax)}</span></div>`:''}
       <div id="bChargeLine" style="display:${tot.deliveryCharge>0?'flex':'none'};justify-content:space-between;font-size:13px;color:#b45309;font-weight:700;"><span>+ 🚚 ${escapeHtml(DB.deliveryChargeLabel())}</span><span id="bChargeVal">${fmtMoney(tot.deliveryCharge)}</span></div>
+      ${tot.prevBalance>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:#b91c1c;font-weight:700;"><span>📋 Purana Baqi</span><span>+ ${fmtMoney(tot.prevBalance)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:800;color:var(--primary);margin-top:6px;border-top:1px dashed rgba(0,0,0,.1);padding-top:6px;"><span>TOTAL</span><span id="bTotalVal">${fmtMoney(tot.total)}</span></div>
     </div>
 
@@ -739,6 +809,38 @@ function openBookingForm() {
       foundBadge.style.display = 'inline-block';
     }
 
+    /* ---- PURANA BAQI: jab customer mile to us ka khula balance dikhao ---- */
+    const prevBanner = $('#prevBalBanner', m);
+    const showPrevBalance = (customerId) => {
+      if (!prevBanner) return;
+      const bal = (typeof customerOpenBalance === 'function') ? customerOpenBalance(customerId) : 0;
+      if (bal > 0) {
+        $('#prevBalTxt', m).textContent = `Is customer ka PURANA BAQI ${fmtMoney(bal)} hai.`;
+        prevBanner.style.display = 'block';
+        const addBtn = $('#addPrevBalBtn', m);
+        if (addBtn) addBtn.onclick = () => {
+          posState.prevBalance = bal;
+          if (typeof toast === 'function') toast(`Purana baqi ${fmtMoney(bal)} invoice me add ho gaya`, 'success');
+          prevBanner.style.display = 'none';
+        };
+      } else {
+        prevBanner.style.display = 'none';
+      }
+    };
+    if (posState.customerId && posState.customerId !== 'cu1') showPrevBalance(posState.customerId);
+    // customer badle to dobara check
+    const _origFill = fillCustomer;
+    fillCustomer.__showBal = true;
+    [phoneInp, nameInp].forEach(inp => inp.addEventListener('change', () => {
+      setTimeout(() => showPrevBalance(posState.customerId), 150);
+    }));
+
+    /* purana baqi — manual input booking form me bhi (optional) */
+    const pbInput = $('#bPrevBalance', m);
+    if (pbInput && window.easyNumber) {
+      window.easyNumber(pbInput, { min: 0, onChange: (v) => { posState.prevBalance = v; } });
+    }
+
     // ===== END CUSTOMER AUTO-SUGGEST =====
 
     // bind days → date
@@ -759,13 +861,15 @@ function openBookingForm() {
       const name = $('#bCustName', m).value.trim();
       const phone = $('#bCustPhone', m).value.trim();
       if (!name) { toast('Customer name required','error'); return; }
-      if (!phone) { toast('Contact number required','error'); return; }
+      /* Contact number ab OPTIONAL — bohat customers number nahi dete */
 
       // pickup & delivery charges (kept outside the discount)
       if ($('#bDeliveryCharge', m)) syncCharge($('#bDeliveryCharge', m).value);
 
       // Save / update customer
-      let customer = DB.all('customers').find(c => c.phone === phone && c.id !== 'cu1');
+      let customer = phone
+        ? DB.all('customers').find(c => c.phone === phone && c.id !== 'cu1')
+        : DB.all('customers').find(c => c.id !== 'cu1' && (c.name || '').toLowerCase() === name.toLowerCase());
       const custData = {
         name, phone,
         address: $('#bCustAddr', m).value.trim(),
@@ -778,11 +882,15 @@ function openBookingForm() {
       posState.customerId = customer.id;
 
       const deliveryTypeEl = m.querySelector('input[name="bDelType"]:checked');
+      /* Backdate (admin) — invoice ki tareekh purani ho sakti hai */
+      const backEl = $('#bBackDate', m);
+      const backDate = backEl && backEl.value ? backEl.value : null;
       const orderMeta = {
         deliveryDate: $('#bDeliveryDate', m).value,
         deliveryType: deliveryTypeEl ? deliveryTypeEl.value : 'hanger',
         notes: $('#bNotes', m).value.trim(),
-        bookingDate: bookingDateIso
+        bookingDate: backDate || bookingDateIso,
+        backdated: !!backDate
       };
       closeModal();
       openPaymentDialog(orderMeta);
@@ -810,6 +918,13 @@ function openPaymentDialog(orderMeta) {
     ${tot.deliveryCharge > 0 ? `
     <div style="display:flex;justify-content:space-between;font-size:12.5px;background:#fff7ed;border:1px dashed #f59e0b;border-radius:8px;padding:8px 10px;margin-bottom:10px;color:#92400e;font-weight:700;">
       <span>🚚 ${escapeHtml(DB.deliveryChargeLabel())}</span><span>${fmtMoney(tot.deliveryCharge)}</span>
+    </div>` : ''}
+
+    ${tot.prevBalance > 0 ? `
+    <div style="background:#fee2e2;border:1px dashed #ef4444;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12.5px;color:#991b1b;">
+      <div style="display:flex;justify-content:space-between;font-weight:700;"><span>🧾 Aaj ka bill</span><span>${fmtMoney(tot.currentBill)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:700;"><span>📋 Purana baqi</span><span>+ ${fmtMoney(tot.prevBalance)}</span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:800;border-top:1px solid #fca5a5;margin-top:4px;padding-top:4px;"><span>Kul total</span><span>${fmtMoney(tot.total)}</span></div>
     </div>` : ''}
 
     <div id="advanceHelper" style="display:none;background:#dcfce7;border-left:4px solid var(--success);padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;">
@@ -940,8 +1055,17 @@ function openPaymentDialog(orderMeta) {
         deliveryCharge: tot.deliveryCharge,          // charged AFTER discount
         deliveryChargeLabel: DB.deliveryChargeLabel(),
         total: tot.total,
+        currentBill: tot.currentBill,                 // is invoice ka apna bill
+        prevBalance: tot.prevBalance,                 // purana baqi (register se) is invoice me add hua
+        prevBalanceSource: tot.prevBalance > 0 ? 'manual/carry-forward' : '',
         paid: actualPaid,
-        createdAt: $('#backdateInput', m).value ? new Date($('#backdateInput', m).value).toISOString() : new Date().toISOString(),
+        /* createdAt: backdate (agar admin ne di) ⊃ purani tareekh, warna aaj */
+        createdAt: (() => {
+          const bd = $('#backdateInput', m) ? $('#backdateInput', m).value : '';
+          if (bd) return new Date(bd).toISOString();
+          if (orderMeta.backdated && orderMeta.bookingDate) return new Date(orderMeta.bookingDate + 'T' + new Date().toTimeString().slice(0,8)).toISOString();
+          return new Date().toISOString();
+        })(),
         due,
         advance: paymentType === 'advance' ? actualPaid : 0,
         paymentType,
@@ -965,7 +1089,7 @@ function openPaymentDialog(orderMeta) {
           if (typeof showLowStockAlert === 'function' && alerts.length) showLowStockAlert(alerts);
         } catch(e) { console.warn('Inventory auto-deduct failed:', e); }
       }
-      posState.cart = []; posState.discountValue = 0; posState.deliveryCharge = 0; posState.customerId = 'cu1';
+      posState.cart = []; posState.discountValue = 0; posState.deliveryCharge = 0; posState.customerId = 'cu1'; posState.prevBalance = 0;
       closeModal();
       toast('Order booked successfully!', 'success');
       openInvoice(saved.id);

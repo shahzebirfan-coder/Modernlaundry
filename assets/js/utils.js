@@ -414,10 +414,12 @@ async function printElement(elementOrSelector, options) {
     styleText = acc.join('\n');
   } catch (e) { styleText = ''; }
 
-  // Step 5: Open print window with everything pre-loaded
-  const win = window.open('', '_blank', 'width=420,height=700');
-  if (!win) { alert('Please allow popups for printing!'); return false; }
-
+  // Step 5: Ek alag document bana kar PRINT karein — magar popup window ke bagair.
+  //
+  // Kyun: purana tareeqa popup + document.write tha. Chrome/Edge is par kabhi kabhi
+  // print preview ko `about:blank` par atka deta hai (client ke yahan yahi hua) —
+  // print dialog khulta hai magar settings load nahi hotin aur Print button dead ho jata hai.
+  // Ab hidden iframe use karte hain: same-origin, koi popup blocker nahi, koi blank page nahi.
   const printDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>${options.title || 'Print'}</title>
 <style>
@@ -430,10 +432,7 @@ html, body {
   font-family: Arial, 'Helvetica Neue', sans-serif !important;
   visibility: visible !important;
 }
-/* This window prints ONE detached slip — never let an inherited
-   "hide everything except #printArea" rule blank the paper. */
 #printArea, #printArea * { visibility: visible !important; }
-/* Controls / buttons that must never reach paper */
 .no-print, .no-print *, .modal-footer, .modal-header .btn { display: none !important; }
 .no-print, .modal-backdrop, .modal-footer, .modal > div:first-child[class*="no-print"] { display: none !important; }
 .invoice-page {
@@ -447,158 +446,202 @@ html, body {
   margin: 0 auto !important;
   max-width: 100% !important;
 }
-.invoice-page * {
-  color: #000 !important;
-  visibility: visible !important;
-}
+.invoice-page * { color: #000 !important; visibility: visible !important; }
 .invoice-page h2 { font-weight: 900 !important; }
 .invoice-page b, .invoice-page strong { font-weight: 900 !important; }
 .qty-circle {
-  background: #fff !important;
-  color: #000 !important;
-  border: 4px solid #000 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  flex-direction: column !important;
-  margin: 14px auto !important;
+  background: #fff !important; color: #000 !important; border: 4px solid #000 !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  flex-direction: column !important; margin: 14px auto !important;
 }
 .qty-circle * { color: #000 !important; }
-.del-type-pill {
-  background: #fff !important;
-  color: #000 !important;
-  border: 2px solid #000 !important;
-}
+.del-type-pill { background: #fff !important; color: #000 !important; border: 2px solid #000 !important; }
 img {
-  max-width: 100%;
-  display: inline-block;
-  visibility: visible !important;
-  /* Printers must not stretch a bitmap beyond its real pixel width, otherwise
-     a ~400-dot logo gets blown up to 576 dots and turns into a blurry block. */
-  image-rendering: -webkit-optimize-contrast;
-  -ms-interpolation-mode: nearest-neighbor;
+  max-width: 100%; display: inline-block; visibility: visible !important;
+  image-rendering: -webkit-optimize-contrast; -ms-interpolation-mode: nearest-neighbor;
 }
-/* === PAPER EDGE SAFETY =================================================
-   Thermal drivers (Windows "POS-80" etc.) often report a printable width
-   SMALLER than the roll (72mm on an 80mm roll). The slip used a fixed
-   max-width (360px) and nowrap totals, so the right column — amounts —
-   was printed past the paper edge and got cut off.
-   Rules below keep every line inside whatever width the driver gives us. */
+.inv-logo { max-width: 100% !important; height: auto !important; margin: 0 auto !important; display: block !important; }
+
+/* === PAPER EDGE SAFETY === */
 html, body, #printArea, #printArea * {
   max-width: 100% !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
   white-space: normal !important;
 }
-.invoice-page, .inv-slip {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-}
-/* table ki columns PIN karein — warna lambi value (date / naam / phone)
-   table ko paper se bahar khinch leti hai aur right side ka amount kat jata hai */
-table { width: 100% !important; max-width: 100% !important; table-layout: fixed !important; }
+.invoice-page, .inv-slip { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+table { width: 100% !important; max-width: 100% !important; table-layout: fixed !important; border-collapse: collapse; }
 table td, table th { overflow-wrap: anywhere !important; word-break: break-word !important; }
-table td:first-child, table th:first-child { width: 55% !important; }
-table td:last-child, table th:last-child { width: 45% !important; }
-/* amount cells right-aligned; lamba ho to next line par (paper ke andar reh kar) */
+table td:first-child, table th:first-child { width: 46% !important; }
+table td:last-child,  table th:last-child  { width: 54% !important; }
+/* OFFICE COPY: apni table widths (values ko poori jagah) */
+.invoice-office table td:first-child, .invoice-office table th:first-child,
+.invoice-office table td:last-child,  .invoice-office table th:last-child { width: auto !important; }
+.invoice-office table.kv td:first-child { width: 36% !important; }
+.invoice-office table.kv td:last-child  { width: 64% !important; }
+/* Jo cheez tootni nahi chahiye (invoice no, phone, tareekh, amount) */
+#printArea .nw, .invoice-page .nw { white-space: nowrap !important; word-break: keep-all !important; }
+/* Poori chaurai wale blocks (terms / timings / credit) — table width rules inhein na chhuein */
+#printArea .block-wide, .invoice-page .block-wide,
+#printArea .dev-credit, .invoice-page .dev-credit { width: 100% !important; max-width: 100% !important; display: block !important; }
+#printArea .dev-credit img, .invoice-page .dev-credit img { max-width: 100% !important; }
 table td:last-child, td:last-child, .amt, .amount { text-align: right !important; white-space: normal !important; }
 div, span, tr, td { box-sizing: border-box !important; }
 img, canvas, svg { max-width: 100% !important; height: auto !important; }
 
-/* Thermal brand logo: physical size in mm, never wider than the paper */
-.inv-logo {
-  max-width: 100% !important;
-  height: auto !important;
-  margin: 0 auto !important;
-  display: block !important;
-}
-table { width: 100%; border-collapse: collapse; }
-.print-slip {
-  page-break-inside: avoid;
-  page-break-after: always;
-  break-after: page;
-  display: block !important;
-  margin: 0 auto;
-}
+.print-slip { page-break-inside: avoid; page-break-after: always; break-after: page; display: block !important; margin: 0 auto; }
 .print-slip:last-child { page-break-after: auto; break-after: auto; }
 .print-page-break { page-break-after: always; break-after: page; height: 0; }
+
 @media print {
-  /* page ka apna margin 0 — side ka space hum khud body padding se dete hain,
-     warna driver ka margin + hamara margin dono lag kar paper tang ho jata hai */
+  /* Chrome ke "Default" margins ko 0 karna: @page margin 0 se Chrome khud
+     Margins = Default par 0 le leta hai (client ke yahan "Default" 12mm tha). */
   @page { size: ${rawPaperMm || paper}mm auto; margin: 0 !important; }
-  /* "Save as PDF" on an 80mm roll used to open a full A4 page with the slip
-     squeezed into one corner. A fixed, roll-sized page keeps the PDF identical
-     to the printed receipt. */
-  html { width: 100%; }
-  html {
-    width: ${paper === '58' ? '58mm' : '80mm'} !important;
-    max-width: ${paper === '58' ? '58mm' : '80mm'} !important;
+
+  /* === COMPACT RECEIPT ===
+     Thermal roll par kaghaz bachane + text bara dikhane ke liye spacing tight:
+     pehle ek 1-item invoice 3-4 sheets leta tha (scale 65% par bhi), ab ~1-1.5. */
+  .invoice-page { line-height: 1.32 !important; }
+  .invoice-page table td, .invoice-page table th { padding: 2px 0 !important; }
+  .invoice-page { padding: 4px !important; }
+  .invoice-page div[style*="margin-bottom:12px"],
+  .invoice-page div[style*="margin-bottom:14px"],
+  .invoice-page div[style*="margin-bottom:16px"] { margin-bottom: 6px !important; }
+  .invoice-page div[style*="margin-top:12px"],
+  .invoice-page div[style*="margin-top:14px"],
+  .invoice-page div[style*="margin-top:16px"] { margin-top: 6px !important; }
+  .qty-circle { width: 78px !important; height: 78px !important; margin: 6px auto !important; border-width: 3px !important; }
+  .qty-circle .num { font-size: 30px !important; }
+  .qty-circle .lbl { font-size: 8px !important; letter-spacing: .5px !important; }
+  .del-type-pill { padding: 2px 10px !important; font-size: 11px !important; }
+  .inv-logo { max-height: 16mm !important; }
+  hr { margin: 3px 0 !important; }
+
+  /* === ONE PAGE RULE (client: "invoice chaye kitni bhi bhari ho, page 1 par hi hogi") ===
+     Har slip ek hi page par; andar ka content khud squeeze hota hai — text chhota hota hai,
+     kuch bahar nahi jata. CUT page ke aakhir par hi hota hai (office copy alag page). */
+  .print-slip, .invoice-page {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
   }
+  .print-slip {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .print-slip:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+  /* lambe items/terms: line-height thora aur tight */
+  .invoice-page table { line-height: 1.22 !important; }
+  .invoice-page > div { margin-top: 2px !important; margin-bottom: 2px !important; }
+  .invoice-page { padding: 3px !important; }
+  /* Logo poori slip par jagah na le — par MUST rahe */
+  .inv-logo { max-height: 15mm !important; }
+  /* Terms: chhota par parhne ke qabil (isi liye credit + sab page 1 par aa jata hai) */
+  .inv-terms { margin-top: 5px !important; padding-top: 4px !important; }
+  .inv-terms-head { font-size: 8.6px !important; margin-bottom: 4px !important; }
+  .inv-terms-body { font-size: 7.2px !important; line-height: 1.36 !important; }
+  .inv-terms-body > div { margin-bottom: 1px !important; }
+  /* Developer credit: compact */
+  .dev-credit { margin-top: 5px !important; padding-top: 4px !important; }
+  .dev-credit img { max-height: 9mm !important; width: auto !important; }
+  html { width: ${paper === '58' ? '58mm' : '80mm'} !important; max-width: ${paper === '58' ? '58mm' : '80mm'} !important; }
   body {
-    /* agar printer ki asli width pata hai to wohi use karein, warna roll width */
-    width: ${rawPaperMm ? '${rawPaperMm}mm' : (paper === '58' ? '58mm' : '80mm')} !important;
-    max-width: ${rawPaperMm ? '${rawPaperMm}mm' : (paper === '58' ? '58mm' : '80mm')} !important;
-    padding: ${Math.max(1, marginMm)}mm !important;   /* dono taraf barabar ka safe margin */
+    width: ${rawPaperMm ? rawPaperMm + 'mm' : (paper === '58' ? '58mm' : '80mm')} !important;
+    max-width: ${rawPaperMm ? rawPaperMm + 'mm' : (paper === '58' ? '58mm' : '80mm')} !important;
+    padding: ${Math.max(1, marginMm)}mm !important;
     margin: 0 auto !important;
     background: #fff !important;
   }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  .invoice-page {
-    padding: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    /* never let the browser shrink-to-fit the receipt — that is what makes
-       thermal text come out tiny or the logo oversized */
-    transform: none !important;
-    zoom: 1 !important;
-  }
+  .invoice-page { padding: 0 !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; transform: none !important; zoom: 1 !important; }
   .inv-logo-wrap, .inv-logo { page-break-inside: avoid !important; }
-  /* small counter slips (partial delivery, payment receipt) keep a receipt shape
-     even when the PDF paper is A4 — never a stretched, half-empty page */
-  .inv-slip { max-width: 88mm !important; margin: 0 auto !important; }
-}
-@media screen {
-  body { padding: 20px; background: #f0f4ff; }
-  .invoice-page { box-shadow: 0 4px 12px rgba(0,0,0,.1); border-radius: 8px; max-width: 380px; }
-  /* slips that were built with their own width keep it in the preview */
-  .invoice-page[style*="width"] { max-width: 100%; }
 }
 </style>
 </head><body>
 <div id="printArea">${html}</div>
-<script>
-  // Wait for all images to load before printing
-  function doPrint() {
-    setTimeout(function() {
-      window.print();
-      setTimeout(function() { window.close(); }, 1000);
-    }, 200);
-  }
-  window.onload = function() {
-    const imgs = document.querySelectorAll('img');
-    if (imgs.length === 0) { doPrint(); return; }
-    let loaded = 0;
-    const checkAll = function() {
-      loaded++;
-      if (loaded >= imgs.length) doPrint();
-    };
-    imgs.forEach(function(img) {
-      if (img.complete && img.naturalHeight !== 0) checkAll();
-      else { img.onload = checkAll; img.onerror = checkAll; }
-    });
-    // Fallback timeout
-    setTimeout(doPrint, 3000);
-  };
-</` + `script>
 </body></html>`;
 
-  win.document.open();
-  win.document.write(printDoc);
-  win.document.close();
+  /* ---------- iframe-based printing (popup-free) ---------- */
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+  document.body.appendChild(frame);
+
+  const cleanup = () => {
+    try { frame.remove(); } catch (e) {}
+  };
+  /* === AUTO-FIT: "invoice bhari ho phir bhi page 1 par" ===
+     Slip ki asli height naapo; page (roll) ki height se zyada ho to zoom chhota kar do.
+     Text chhota hota hai magar kuch bhi page 2 par nahi jata. */
+  const fitSlipsToPage = () => {
+    try {
+      const doc2 = frame.contentWindow.document;
+      const st = (typeof DB !== 'undefined' && DB.settings) ? DB.settings() : {};
+      const pageMm = +(st.invoicePaperHeightMm) || 297;
+      const MM2PX = 96 / 25.4;
+      /* 10mm safety: printer ka non-printable area + rounding */
+      const targetPx = (pageMm - 10) * MM2PX;
+      doc2.querySelectorAll('.print-slip').forEach(slip => {
+        /* reset */
+        slip.style.transform = '';
+        slip.style.width = '';
+        slip.style.transformOrigin = '';
+        const naturalH = slip.getBoundingClientRect().height;
+        if (!naturalH || naturalH <= targetPx) return;
+        /* scale DOWN: width ko ulta barha kar scale karte hain — line wrapping waisi hi rehti hai,
+           sirf print size chhota hota hai. Is tarah poora invoice EK page par aa jata hai. */
+        const z = Math.max(0.42, Math.min(1, (targetPx / naturalH) * 0.99));
+        slip.style.transformOrigin = 'top left';
+        slip.style.transform = `scale(${Math.floor(z * 1000) / 1000})`;
+        slip.style.width = (100 / z).toFixed(3) + '%';
+      });    } catch (e) { console.warn('[print] auto-fit skip', e); }
+  };
+
+  const triggerPrint = () => {
+    try {
+      fitSlipsToPage();
+      const fw = frame.contentWindow;
+      fw.focus();
+      fw.print();
+    } catch (e) {
+      console.warn('[print] iframe print failed, trying popup fallback', e);
+      const win = window.open('', '_blank', 'width=420,height=700');
+      if (win) { win.document.write(printDoc); win.document.close(); }
+    }
+    /* iframe ko thodi der baad hatayein (print dialog band hone ke baad) */
+    setTimeout(cleanup, 60000);
+  };
+
+  const writeDoc = () => {
+    try {
+      const doc = frame.contentWindow.document;
+      doc.open(); doc.write(printDoc); doc.close();
+    } catch (e) { console.warn('[print] could not write print document', e); }
+  };
+
+  writeDoc();
+
+  /* images load hone ka intezaar, phir print (max 2.5s) */
+  let printed = false;
+  const once = () => { if (printed) return; printed = true; triggerPrint(); };
+  try {
+    const fdoc = frame.contentWindow.document;
+    const imgs = Array.from(fdoc.querySelectorAll('img'));
+    let pending = imgs.filter(im => !(im.complete && im.naturalHeight !== 0)).length;
+    if (!pending) { setTimeout(once, 120); }
+    else {
+      imgs.forEach(im => {
+        im.addEventListener('load', () => { if (--pending <= 0) once(); });
+        im.addEventListener('error', () => { if (--pending <= 0) once(); });
+      });
+      setTimeout(once, 2500);
+    }
+  } catch (e) { setTimeout(once, 300); }
+
   return true;
 }
 

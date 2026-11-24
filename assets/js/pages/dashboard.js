@@ -1,5 +1,22 @@
 /* ===================== DASHBOARD ===================== */
 function renderDashboard() {
+  /* ============================================================
+     PRIVACY MODE (👁️) — client ki request
+     Dashboard ke saare amounts (sales, received, profit, drawer…)
+     default BLUR rehte hain; tooltip me "•••••" aata hai — is liye
+     screenshot / pehlu banda kuch nahi parh sakta. Eye icon dabane par
+     poore dashboard par amounts saaf ho jate hain, dobara dabane par blur.
+     Choice per-device localStorage me yaad rehti hai (default: hidden).
+     ============================================================ */
+  const PRIV = (() => {
+    try { return localStorage.getItem('mdcDashPriv') === 'show'; } catch (e) { return false; }
+  })();
+  const M = (v) => {
+    const raw = (typeof fmtMoney === 'function') ? fmtMoney(v) : ('Rs. ' + v);
+    if (PRIV) return `<span class="amtv">${raw}</span>`;
+    return `<span class="amtv amt-hidden" title="Dikhane ke liye 👁️ dabayein">${raw}</span>`;
+  };
+
   const orders = DB.all('orders');
   const customers = DB.all('customers');
   const expenses = DB.all('expenses');
@@ -83,7 +100,7 @@ function renderDashboard() {
     : last7.map(d => `
     <div style="display:flex;flex-direction:column;align-items:center;flex:1;">
       <div style="display:flex;flex-direction:column;justify-content:flex-end;height:140px;width:100%;padding:0 6px;">
-        <div title="${fmtMoney(d.value)}" style="background:linear-gradient(180deg,#0b3f80,#0e9ad2);height:${(d.value/maxVal)*100}%;min-height:4px;border-radius:6px 6px 0 0;"></div>
+        <div data-amt="${fmtMoney(d.value)}" style="background:linear-gradient(180deg,#0b3f80,#0e9ad2);height:${(d.value/maxVal)*100}%;min-height:4px;border-radius:6px 6px 0 0;"></div>
       </div>
       <div style="font-size:11px;color:var(--text-soft);margin-top:6px;">${d.label}</div>
       <div style="font-size:11px;font-weight:700;">${d.value? fmtMoney(d.value):'—'}</div>
@@ -154,7 +171,7 @@ function renderDashboard() {
         <div class="ic" style="background:#0b3f80;color:#fff;">💰</div>
         <div>
           <div class="lbl">Today's Sales</div>
-          <div class="val">${fmtMoney(todayInvoice)}</div>
+          <div class="val">${M(todayInvoice)}</div>
           <div class="lbl" style="font-size:10px;">Total billed today</div>
         </div>
       </div>
@@ -163,7 +180,7 @@ function renderDashboard() {
         <div class="ic" style="background:#22c55e;color:#fff;">✅</div>
         <div>
           <div class="lbl">Cash Received</div>
-          <div class="val" style="color:#16a34a;">${fmtMoney(todayReceived)}</div>
+          <div class="val" style="color:#16a34a;">${M(todayReceived)}</div>
           <div class="lbl" style="font-size:10px;">Actually collected (drawer)</div>
         </div>
       </div>
@@ -172,7 +189,7 @@ function renderDashboard() {
         <div class="ic" style="background:#f59e0b;color:#fff;">⏰</div>
         <div>
           <div class="lbl">Outstanding Due</div>
-          <div class="val" style="color:#d97706;">${fmtMoney(todayDue)}</div>
+          <div class="val" style="color:#d97706;">${M(todayDue)}</div>
           <div class="lbl" style="font-size:10px;">Unpaid balance ${todayDue>0?'(Click to collect)':''}</div>
         </div>
       </div>
@@ -184,7 +201,7 @@ function renderDashboard() {
         <div class="ic" style="background:#ef4444;color:#fff;">💸</div>
         <div>
           <div class="lbl">Today's Expenses</div>
-          <div class="val" style="color:#dc2626;">${fmtMoney(todayExp)}</div>
+          <div class="val" style="color:#dc2626;">${M(todayExp)}</div>
           <div class="lbl" style="font-size:10px;">All outflows</div>
         </div>
       </div>
@@ -193,7 +210,7 @@ function renderDashboard() {
         <div class="ic" style="background:${todayProfit>=0?'#10b981':'#ef4444'};color:#fff;">📈</div>
         <div>
           <div class="lbl">Net Profit Today</div>
-          <div class="val" style="color:${todayProfit>=0?'#059669':'#dc2626'};">${fmtMoney(todayProfit)}</div>
+          <div class="val" style="color:${todayProfit>=0?'#059669':'#dc2626'};">${M(todayProfit)}</div>
           <div class="lbl" style="font-size:10px;">Received minus Expenses</div>
         </div>
       </div>
@@ -257,15 +274,15 @@ function renderDashboard() {
     <div class="grid-stats" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
       <div class="stat-card">
         <div class="ic b1">💰</div>
-        <div><div class="lbl">Sales</div><div class="val">${fmtMoney(monthInvoice)}</div></div>
+        <div><div class="lbl">Sales</div><div class="val">${M(monthInvoice)}</div></div>
       </div>
       <div class="stat-card">
         <div class="ic b2">✅</div>
-        <div><div class="lbl">Received</div><div class="val" style="color:var(--success);">${fmtMoney(monthReceived)}</div></div>
+        <div><div class="lbl">Received</div><div class="val" style="color:var(--success);">${M(monthReceived)}</div></div>
       </div>
       <div class="stat-card">
         <div class="ic ${monthProfit>=0?'b2':'b3'}">📊</div>
-        <div><div class="lbl">Net Profit</div><div class="val" style="color:${monthProfit>=0?'var(--success)':'var(--danger)'}">${fmtMoney(monthProfit)}</div></div>
+        <div><div class="lbl">Net Profit</div><div class="val" style="color:${monthProfit>=0?'var(--success)':'var(--danger)'}">${M(monthProfit)}</div></div>
       </div>
       <div class="stat-card">
         <div class="ic b5">📦</div>
@@ -284,7 +301,7 @@ function renderDashboard() {
             <div class="ic" style="background:#22c55e;color:#fff;">💵</div>
             <div>
               <div class="lbl">Cash Drawer</div>
-              <div class="val" style="color:#16a34a;">${fmtMoney(b.cash)}</div>
+              <div class="val" style="color:#16a34a;">${M(b.cash)}</div>
               <div class="lbl" style="font-size:10px;">Available for withdrawal</div>
             </div>
           </div>
@@ -292,7 +309,7 @@ function renderDashboard() {
             <div class="ic" style="background:#f59e0b;color:#fff;">📱</div>
             <div>
               <div class="lbl">JazzCash</div>
-              <div class="val" style="color:#d97706;">${fmtMoney(b.jazzcash)}</div>
+              <div class="val" style="color:#d97706;">${M(b.jazzcash)}</div>
               <div class="lbl" style="font-size:10px;">Available for withdrawal</div>
             </div>
           </div>
@@ -300,7 +317,7 @@ function renderDashboard() {
             <div class="ic" style="background:#3b82f6;color:#fff;">📱</div>
             <div>
               <div class="lbl">Easypaisa</div>
-              <div class="val" style="color:#2563eb;">${fmtMoney(b.easypaisa)}</div>
+              <div class="val" style="color:#2563eb;">${M(b.easypaisa)}</div>
               <div class="lbl" style="font-size:10px;">Available for withdrawal</div>
             </div>
           </div>
@@ -308,7 +325,7 @@ function renderDashboard() {
             <div class="ic" style="background:#8b5cf6;color:#fff;">🏦</div>
             <div>
               <div class="lbl">Bank</div>
-              <div class="val" style="color:#7c3aed;">${fmtMoney(b.bank)}</div>
+              <div class="val" style="color:#7c3aed;">${M(b.bank)}</div>
               <div class="lbl" style="font-size:10px;">Available for withdrawal</div>
             </div>
           </div>
@@ -319,8 +336,8 @@ function renderDashboard() {
             <div style="display:flex;align-items:center;gap:12px;">
               <div style="font-size:26px;">👤</div>
               <div>
-                <div style="font-weight:700;font-size:14px;color:#9a3412;">You withdrew <b>${fmtMoney(b.monthDrawings)}</b> from shop this month</div>
-                <div style="font-size:12px;color:#c2410c;">Today: ${fmtMoney(b.todayDrawings)} • Click to view all withdrawals</div>
+                <div style="font-weight:700;font-size:14px;color:#9a3412;">You withdrew <b>${M(b.monthDrawings)}</b> from shop this month</div>
+                <div style="font-size:12px;color:#c2410c;">Today: ${M(b.todayDrawings)} • Click to view all withdrawals</div>
               </div>
             </div>
             <div style="font-weight:700;color:#ea580c;font-size:13px;">View Drawings →</div>
@@ -350,7 +367,7 @@ function renderDashboard() {
 
     <div class="card" style="margin-top:20px;">
       <div class="card-header">
-        <h3>💰 Today's Payments Received <span style="color:var(--success);font-size:18px;">(${fmtMoney(todayReceived)})</span></h3>
+        <h3>💰 Today's Payments Received <span style="color:var(--success);font-size:18px;">(${M(todayReceived)})</span></h3>
         <span class="badge" style="background:var(--success);color:#fff;">${todayPayments.length} payment${todayPayments.length===1?'':'s'}</span>
       </div>
       ${todayPayments.length ? `
@@ -368,14 +385,14 @@ function renderDashboard() {
                 <td>${escapeHtml(c.name)}</td>
                 <td>${emoji} <span style="text-transform:capitalize;">${escapeHtml(p.method||'cash')}</span>${p.note?`<br><small style="color:var(--text-soft);">${escapeHtml(p.note)}</small>`:''}</td>
                 <td><small>${escapeHtml(p.byName || p.by || '-')}</small></td>
-                <td style="text-align:right;font-weight:700;color:var(--success);">${fmtMoney(p.amount)}</td>
+                <td style="text-align:right;font-weight:700;color:var(--success);">${M(p.amount)}</td>
               </tr>`;
             }).join('')}
           </tbody>
           <tfoot>
             <tr style="background:#dcfce7;font-weight:800;font-size:15px;">
               <td colspan="5" style="padding:10px;text-align:right;">GRAND TOTAL COLLECTED TODAY:</td>
-              <td style="text-align:right;padding:10px;color:#065f46;">${fmtMoney(todayReceived)}</td>
+              <td style="text-align:right;padding:10px;color:#065f46;">${M(todayReceived)}</td>
             </tr>
           </tfoot>
         </table>
@@ -396,4 +413,83 @@ function renderDashboard() {
 
   $('#app').innerHTML = renderLayout('dashboard', content);
   bindLayout();
+  bindDashboardPrivacy();
 }
+
+/* ================= PRIVACY MODE (👁️) =================
+   Amounts default blur. Eye icon → sab saaf. Dobara → blur.
+   Setting per device yaad rehti hai; screenshot se amount parha nahi ja sakta. */
+function dashPrivacyCss() {
+  return `<style id="dashPrivCss">
+    .amtv { font-variant-numeric: tabular-nums; letter-spacing: .2px; display:inline-block; }
+    .amt-hidden {
+      filter: blur(6px);
+      user-select: none;
+      -webkit-user-select: none;
+      pointer-events: none;
+      cursor: default;
+    }
+    @media print { .amt-hidden { filter: blur(6px) !important; } }
+    #dashEyeBtn {
+      display:inline-flex;align-items:center;gap:7px;
+      padding:7px 14px;border-radius:999px;border:1.5px solid var(--border);
+      background:var(--surface);color:var(--text);font-weight:700;font-size:12.5px;
+      cursor:pointer;font-family:inherit;transition:.15s;
+    }
+    #dashEyeBtn:hover { border-color:#0b3f80;background:#f0f7ff; }
+    #dashEyeBtn.on { background:#0b3f80;border-color:#0b3f80;color:#fff; }
+    .priv-bar {
+      display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+      background:linear-gradient(135deg,#f1f5f9,#e2e8f0);
+      border:1px solid #cbd5e1;border-radius:12px;padding:10px 14px;margin-bottom:14px;
+    }
+  </style>`;
+}
+
+function bindDashboardPrivacy() {
+  const host = $('#app');
+  if (!host) return;
+  if (!document.getElementById('dashPrivCss')) host.insertAdjacentHTML('afterbegin', dashPrivacyCss());
+
+  /* button ko page title ke sath rakhein */
+  const titleEl = host.querySelector('h1.page-title');
+  let btn = document.getElementById('dashEyeBtn');
+  if (!btn && titleEl) {
+    const bar = document.createElement('div');
+    bar.className = 'priv-bar';
+    titleEl.parentNode.insertBefore(bar, titleEl);
+    bar.appendChild(titleEl);
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    wrap.innerHTML = `<span style="font-size:11.5px;color:#475569;font-weight:600;">Amounts chhupaye hue hain</span>
+      <button id="dashEyeBtn" type="button" title="Amounts dikhayein / chhupayein"></button>`;
+    bar.appendChild(wrap);
+  }
+  btn = document.getElementById('dashEyeBtn');
+
+  const paint = () => {
+    let show = false;
+    try { show = localStorage.getItem('mdcDashPriv') === 'show'; } catch (e) {}
+    document.querySelectorAll('.amt-hidden').forEach(el => { el.style.filter = show ? 'none' : ''; });
+    if (btn) {
+      btn.classList.toggle('on', show);
+      btn.innerHTML = show ? '🙈 Chhupayein' : '👁️ Dikhayein';
+      btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+    }
+    const hint = document.querySelector('.priv-bar span');
+    if (hint) hint.textContent = show ? 'Amounts visible' : 'Amounts chhupaye hue hain';
+  };
+
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = '1';
+    btn.onclick = () => {
+      let show = false;
+      try { show = localStorage.getItem('mdcDashPriv') === 'show'; } catch (e) {}
+      try { localStorage.setItem('mdcDashPriv', show ? 'hide' : 'show'); } catch (e) {}
+      paint();
+      if (typeof toast === 'function') toast(show ? '🙈 Amounts chhupa diye' : '👁️ Amounts dikha diye', 'success');
+    };
+  }
+  paint();
+}
+window.bindDashboardPrivacy = bindDashboardPrivacy;
