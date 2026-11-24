@@ -1,0 +1,34 @@
+MODERN DRY CLEANERS — AUTO SYNC FIX
+Version ?v=20261124.0   |   Service worker: modern-dry-cleaners-pos-v55
+Build tag: cloud v20 (auto-sync, wipe-safe)
+
+MASLA KYA THA (asli wajah — guess nahi, check kar ke):
+1) Naye computer par jab website khulti thi to system PEHLE apna khaali data cloud par
+   bhej deta tha, PHIR cloud se data maangta tha. Natija: cloud par 0 orders — aur
+   client ki website kholne par purana data nazar hi nahi aata tha.
+2) Agar Firebase ki library (gstatic.com) load na ho (office network/firewall) to sync
+   hamesha "jod raha hai..." par atak jata tha. Backup (REST) rasta bhi kharab tha —
+   wo galat address par check karta tha (is liye kabhi chalta hi nahi tha).
+3) Push fail hone par system chup chaap ruk jata tha; page reload par "bhejna baqi"
+   yaad bhi nahi rehta tha.
+
+AB KYA HO GA (auto, koi button nahi):
+- Order/entry save → 0.8 second mein cloud par.
+- Har 20 second background check + fail par 5 second baad dobara.
+- Internet wapas aaye ya tab dobara kholein → foran sync.
+- Real-time sync mar jaye to bhi har 20 second cloud se naya data aa jata hai.
+- ⚠️ NAYA COMPUTER AB CLOUD KA DATA NAHI MITA SAKTA (ye sabse bara fix).
+- Header mein live ☁️ badge: "Sync ON" / "Bhejna baqi…" / "Save hua ✓" / "⚠️ masla".
+  Badge par click → details (cloud se kab aaya, cloud par kab gaya) + "Abhi sync karein".
+- Settings → Cloud Sync par bhi yehi live status.
+
+AHEM: Agar cloud par pehle se data GUM ho gaya hai (0 orders), to wo data wapas nahi
+aa sakta — magar ab jis computer par asli data mojood hai, us par ek dafa:
+  Settings → Cloud Sync → "Force Push This Device → Cloud"
+Dabaane se wo data cloud par chala jayega aur baqi sab computers ko mil jayega.
+Iske baad sab kuch khud-ba-khud sync hota rahega.
+
+Note: "Force Push" sirf usi computer par dabayein jahan asli/complete data ho.
+
+Update: naya zip extract karein → website kholein → Ctrl+Shift+R (ek dafa).
+Koi setting dobara save karne ki zaroorat nahi.

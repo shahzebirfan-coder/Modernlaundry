@@ -1231,3 +1231,36 @@ PDF us mein show toh nahi hoga na?"*
 ### Tests
 `tpdf.js` +2 ✓ (customer PDF me CUT nahi; office copy alag page). Sab suites green.
 Version: `?v=20261123.2`, sw `modern-dry-cleaners-pos-v54`.
+
+---
+
+## 16. AUTO SYNC FIX (v20261124.0 / sw v55) — "sync ka bohat issue"
+**Client:** *"Auto SYNC hona chahiye direct. Apne system par client ki website kholi, mere paas data sync ho kar nahi aaya."*
+
+### Asli wajahaat (diagnose kiye)
+1. **Naye PC ka khaali data cloud ko mita raha tha.** Login/boot par `push()` **pehle** chalta tha (naya PC ka seed),
+   `pullAndMerge()` baad mein → cloud par 0 orders. Isi liye "client ki website kholi, data nahi aaya."
+2. **REST fallback kabhi chalta hi nahi tha:** probe `/<root>/.json` par jaata tha → rules sirf `/shops/{id}` par hain →
+   401 → REST mode reject. (Aaj live check: root = 401, `/shops/modern-laundry-main` = 200.)
+3. **Firebase SDK load par koi timeout nahi tha** → gstatic block/slow ho to sync hamesha ke liye "jod raha hai…" par atak.
+4. `push()` fail hone par sirf console warning — dirty flag memory mein, reload par bhool jata tha, retry nahi.
+5. Real-time listener mar jane par koi backup nahi (kabhi 20s REST poll tha hi nahi).
+
+### Fix
+- **PULL PEHLE, PHIR PUSH** har jagah (`ensureCloudConnected`, `cloudAutoInit`, login-sync, quick enable, reconnect).
+- **Wipe guard:** `_beforeFirstPull = true` jab tak cloud se data na aaye push bilkul nahi; `_remoteIsEmpty()` — agar cloud
+  khaali aur device par asli data hai to cloud ko device ka data se replace kiya jata hai (seed se overwrite nahi).
+- **Auto-sync timing:** save ke **0.8s** baad push; dirty flag `localStorage` mein (reload ke baad bhi yaad);
+  har **20s** flush + **5s** retry (fail par); `online` aur tab wapas aane par foran push; reconnect har **15s**.
+- **Backup polling:** `_startPullPolling()` — listener fail ho jaye tab bhi har 20s cloud se naya data.
+- **SDK 8s timeout + REST fallback** (`/shops/{id}` probe). REST ab kaam karta hai.
+- `getShopId()` kabhi khali nahi (default `modern-laundry-main`), localStorage safe wrappers (`lsGet/lsSet`).
+- **UI:** header mein live ☁️ pill (Sync ON / Bhejna baqi… / Save hua ✓ / ⚠️ masla) — click par details +
+  "Abhi sync karein". Settings → Cloud Sync par bhi live status (cloud se aaya / cloud par gaya).
+- Recovery popup se pehle **4 auto-retries** (faaltu popup nahi).
+
+### Tests
+`tsyncfix.js` (22 ✓ — merge safety, wipe guard, timings, live cloud read) aur
+`tsynclive.js` — **asli Firebase RTDB** ke sath end-to-end: naya khaali device pull karta hai (cloud nahi chhera),
+purana device order push karta hai, naya device khud le aata hai, khaali push cloud data nahi udata (baseline restore).
+Version: `?v=20261124.0`, sw `modern-dry-cleaners-pos-v55`, build tag `cloud v20 (auto-sync, wipe-safe)`.
