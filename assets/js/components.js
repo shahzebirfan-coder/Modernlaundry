@@ -135,7 +135,9 @@ function renderLayout(activePage, contentHtml) {
                 🏢 ${escapeHtml(getActiveBranchName())}
               </div>
             ` : ''}
-            ${(typeof CLOUD !== 'undefined' && CLOUD.isEnabled() && CLOUD.isReady()) ? '<button class="icon-btn" id="forceSyncBtn" title="Force Cloud Sync" style="color:var(--success);font-weight:bold;">☁️</button>' : ''}
+            ${(typeof CLOUD !== 'undefined') ? `<button class="icon-btn sync-pill" id="forceSyncBtn" title="Auto Cloud Sync — yahan click kar ke details / abhi sync" style="display:flex;align-items:center;gap:6px;width:auto;padding:0 10px;font-size:12px;font-weight:800;white-space:nowrap;">
+              <span id="syncPillIcon">☁️</span><span id="syncPillText">Sync</span>
+            </button>` : ''}
             <div class="user-chip">
               <div class="avatar">${user.name.charAt(0).toUpperCase()}</div>
               <div>
@@ -197,6 +199,73 @@ function bindLayout() {
   $$('[data-action="logout"]').forEach(n => n.onclick = () => {
     if (typeof attemptLogout === 'function') attemptLogout(); else { DB.logout(); app.go('login'); }
   });
+
+  /* ===== LIVE SYNC PILL (client: "auto sync hona chahiye, direct") =====
+     Har 2 second haqeeqat dikhata hai: Sync ON / Bhejna baqi… / Save hua ✓ / Masla.
+     Click → details + "Abhi sync" button. */
+  window.updateSyncPill = function () {
+    const ic = $('#syncPillIcon'), tx = $('#syncPillText'), btn = $('#forceSyncBtn');
+    if (!btn || typeof CLOUD === 'undefined') return;
+    const st = (typeof CLOUD.status === 'function') ? CLOUD.status() : { state: 'ok', text: 'Sync' };
+    const map = {
+      ok:         ['☁️', '#10b981', CLOUD._lastPushAt && Date.now() - CLOUD._lastPushAt < 10000 ? 'Save hua ✓' : 'Sync ON'],
+      pending:    ['⏳', '#f59e0b', 'Bhejna baqi…'],
+      connecting: ['🔄', '#3b82f6', 'Jod raha…'],
+      error:      ['⚠️', '#ef4444', 'Sync masla'],
+      off:        ['⛔', '#94a3b8', 'Sync band']
+    };
+    const [icon, color, text] = map[st.state] || map.ok;
+    if (ic) ic.textContent = icon;
+    if (tx) tx.textContent = st.text || text;
+    btn.style.color = color;
+    btn.style.borderColor = color;
+    btn.title = 'Cloud Sync: ' + (st.text || text) + ' — click for details';
+  };
+  window.updateSyncPill();
+  clearInterval(window._syncPillTimer);
+  window._syncPillTimer = setInterval(() => { try { window.updateSyncPill(); } catch (e) {} }, 2000);
+
+  const syncBtnEl = $('#forceSyncBtn');
+  if (syncBtnEl) syncBtnEl.onclick = () => {
+    const st = (typeof CLOUD !== 'undefined' && CLOUD.status) ? CLOUD.status() : {};
+    const lastPush = (typeof CLOUD !== 'undefined' && CLOUD._lastPushAt) ? new Date(CLOUD._lastPushAt).toLocaleTimeString() : '—';
+    const lastPull = (typeof CLOUD !== 'undefined' && CLOUD._lastPullAt) ? new Date(CLOUD._lastPullAt).toLocaleTimeString() : '—';
+    const pending = (typeof CLOUD !== 'undefined' && (CLOUD._dirty || (CLOUD.status && CLOUD.status().state === 'pending'))) ? 'YES' : 'NO';
+    openModal(`
+      <h3>☁️ Cloud Sync — Auto</h3>
+      <p class="sub">Sync khud chalta hai. Neeche haqeeqat dikh rahi hai:</p>
+      <div style="background:var(--surface-2,#f1f5f9);border-radius:10px;padding:14px;font-size:13px;line-height:2;">
+        <div><b>Status:</b> ${escapeHtml(st.text || '—')}</div>
+        <div><b>Backend:</b> ${escapeHtml((CLOUD && CLOUD._mode) || '—')}</div>
+        <div><b>Shop ID:</b> ${escapeHtml((CLOUD && CLOUD.getShopId && CLOUD.getShopId()) || '—')}</div>
+        <div><b>Aakhri baar cloud se aaya:</b> ${lastPull}</div>
+        <div><b>Aakhri baar cloud par gaya:</b> ${lastPush}</div>
+        <div><b>Bhejna baqi:</b> ${pending}</div>
+        ${(CLOUD && CLOUD._lastError) ? `<div style="color:#ef4444;"><b>Error:</b> ${escapeHtml(CLOUD._lastError)}</div>` : ''}
+      </div>
+      <div class="modal-footer" style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="syncNowBtn">🔄 Abhi sync karein</button>
+        <button class="btn btn-secondary" onclick="closeModal();openCloudSyncManager({advanced:true})">⚙️ Settings</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      </div>
+    `);
+    const nb = $('#syncNowBtn');
+    if (nb) nb.onclick = async () => {
+      nb.disabled = true; nb.textContent = 'Sync ho raha hai…';
+      try {
+        await CLOUD.init();
+        await CLOUD.pullAndMerge();
+        await CLOUD.push();
+        await CLOUD.listen();
+        if (typeof toast === 'function') toast('✅ Sync mukammal — data cloud par mehfooz', 'success');
+        closeModal();
+        if (typeof app !== 'undefined' && app.current) app.go(app.current);
+      } catch (e) {
+        if (typeof toast === 'function') toast('Sync fail: ' + e.message, 'error');
+        nb.disabled = false; nb.textContent = '🔄 Abhi sync karein';
+      }
+    };
+  };
 
   const langBtn = $('#langToggle');
   if (langBtn) {

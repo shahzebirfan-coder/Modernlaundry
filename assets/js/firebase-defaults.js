@@ -30,7 +30,7 @@ const FIREBASE_DEFAULT_CFG = {
 const FIREBASE_DEFAULT_SHOP_ID = 'modern-laundry-main';
 
 /* Build tag — client is se confirm kar sakta hai ke naya code chal raha hai */
-const MRL_BUILD_TAG = '2026-11-19 · cloud v19 (RTDB+Firestore)';
+const MRL_BUILD_TAG = '2026-11-19 · cloud v20 (auto-sync, wipe-safe)';
 
 if (typeof window !== 'undefined') {
   window.MRL_BUILD_TAG = MRL_BUILD_TAG;

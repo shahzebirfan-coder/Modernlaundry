@@ -577,10 +577,24 @@ function renderSettings() {
   }
   const cEl = $('#cloudStatus');
   if (cEl) {
-    if (CLOUD.isEnabled() && CLOUD.isReady()) {
-      const last = localStorage.getItem(CLOUD.LAST_SYNC_KEY);
-      cEl.innerHTML = `✅ Active • Shop ID: <b>${CLOUD.getShopId()}</b>${last?' • Last sync: '+new Date(last).toLocaleString():''}`;
-    } else cEl.innerHTML = CLOUD.getConfig() ? '⏸️ Configured but paused' : '❌ Not set up';
+    /* LIVE status — jhoota "Active" na dikhe. Har 3 second refresh. */
+    const paintCloudStatus = () => {
+      if (!(CLOUD.isEnabled() && CLOUD.isReady())) {
+        cEl.innerHTML = CLOUD.getConfig() ? '⏸️ Configured but paused' : '❌ Not set up';
+        return;
+      }
+      const st = (typeof CLOUD.status === 'function') ? CLOUD.status() : { state: 'ok', text: 'Sync ON' };
+      const col = st.state === 'ok' ? '#10b981' : st.state === 'pending' || st.state === 'connecting' ? '#f59e0b' : '#ef4444';
+      const push = CLOUD._lastPushAt ? new Date(CLOUD._lastPushAt).toLocaleTimeString() : '—';
+      const pull = CLOUD._lastPullAt ? new Date(CLOUD._lastPullAt).toLocaleTimeString() : '—';
+      cEl.innerHTML = `<span style="color:${col};font-weight:800;">${escapeHtml(st.text || 'Sync ON')}</span>
+        • Shop: <b>${escapeHtml(CLOUD.getShopId())}</b>
+        • Cloud se aaya: ${pull} • Cloud par gaya: ${push}
+        ${CLOUD._lastError ? `<br><span style="color:#ef4444;font-size:10px;">${escapeHtml(CLOUD._lastError)}</span>` : ''}`;
+    };
+    paintCloudStatus();
+    clearInterval(window._cloudStatusTimer);
+    window._cloudStatusTimer = setInterval(() => { try { paintCloudStatus(); } catch (e) {} }, 3000);
   }
 
   $('#importFile').onchange = (e) => {
