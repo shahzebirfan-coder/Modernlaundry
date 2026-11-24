@@ -959,3 +959,275 @@ Client-facing proof: `Modern Dry Cleaners - Print Fix (receipt).pdf` (before/aft
 ### Client ko batana
 Print dialog mein **Scale = Default (100%)**, **Margins = None/Minimum**, paper = **80mm Roll** —
 yeh teen cheezein browser ki taraf se hain, code unhe control nahi kar sakta.
+
+
+---
+
+## 15L. Chrome print preview "about:blank" par atak jata hai (Print button dead)
+
+Client ka screenshot: print dialog khula, Destination = *BlackCopper 80mm Serial*, magar
+preview blank, "More settings" kuch nahi, Print button disabled.
+
+### Wajah
+`printElement()` purane tareeqe se **popup window** kholta tha (`window.open('', '_blank')`)
+aur us mein `document.write()` karta tha. Chrome/Edge is pattern par kabhi kabhi print preview
+ko `about:blank` par freeze kar deta hai (popup blockers + document.write ki wajah se).
+Yeh app ka bug nahi tha, magar client ke liye "printer kaam nahi kar raha" jaisa tha.
+
+### Fix — iframe printing (popup ke bagair)
+- `printElement()` ab ek **hidden, same-origin iframe** banata hai, us mein print document likhta hai,
+  aur `iframe.contentWindow.print()` call karta hai → Chrome ka native print dialog, koi blank tab nahi.
+- Images load hone ka intezaar (max 2.5s) phir print; iframe 60s baad khud remove.
+- Agar kisi purane browser mein iframe print fail ho to **popup fallback** (try/catch) waise hi mojood.
+- Poora print CSS (paper-edge safety, 55/45 columns, `@page size = printable width`) ab **ek hi jagah**
+  maintain hota hai, taake dobara divergence na ho.
+
+### Verified
+`tprintiframe.js` 11 ✓ — `window.open` call **0**, `iframe.print()` **1**, slip content iframe mein,
+55/45 columns + `@page size: 72mm` + amounts wrap-able.
+`tprintfix.js` 13 ✓ · `tdcprint.js` / `tdelcharge.js` / `tpress.js` / `tcloudauto.js` / `tinvoices.js` green.
+
+### Client ke liye
+`Modern Dry Cleaners - Print Hang Fix (Chrome).txt` — atki hui print cancel karne ka tareeqa,
+Ctrl+Shift+R, aur Windows printer ki one-time settings (80mm roll → Printable width 72).
+
+
+---
+
+## 15M. Login block ho jaye to? — Vendor Recovery Code (offline)
+
+**Client ka masla:** `admin` / `Admin@123` ghalat aata hai, magar `aibot` se login ho jata hai.
+
+**Wajah (code test se sabit):** build ka seed password (`Admin@123`) sirf **pehli dafa** chalta hai.
+Jab tak koi ek dafa us account se login ho jaye — ya password kisi ne badal diya ho — to
+`MDC_VAULT` mein usi username ka naya one-way hash aa jata hai aur purana seed **retire** ho jata hai
+(`vault.verify()` → PBKDF2 match na hone par `{ok:false}`). Yeh security feature hai, bug nahi.
+
+**Naya hal — Vendor Recovery Code (`assets/js/recovery-code.js`)**
+- Vendor (IT owner) apni **private key** (`VENDOR-RECOVERY-private.pem`, app ke bahar) se chhota code banata hai:
+  `node vendor-recover.js admin 2026-12-15 <DEVICE_TAG>`
+- App ke andar sirf **public key** hai → code banaya nahi ja sakta, sirf check hota hai.
+- Code ke andar: `u` (username), `d` (device tag — sirf usi PC par chalta hai), `exp` (expiry).
+- Kanewal checks: **ECDSA P-256 signature**, expiry, device match, **replay** (ek code sirf ek dafa).
+- Verified hone par: temp password banta hai (`RC-XXXXXXXX`), woh vault mein set hota hai,
+  aur login ke foran baad app **naya password set karne ko majboor** karta hai (`mdcForcePwdChange`).
+- Sab kuch **offline** — internet / Firebase / Master Recovery Code ki zaroorat nahi.
+
+**Client ke steps:** login screen → *Forgot Password?* → **Vendor Recovery Code** →
+woh screen apna **Device tag** dikhati hai → tag IT owner ko bhejein → code paste → temp password se login → naya password.
+
+**Login error ab wazeh hai:** username hi mojood nahi ho to "username is system mein nahi hai",
+aur password ghalat ho to "password ghalat hai — Forgot Password → Vendor Recovery Code".
+
+**Naya permission:** `users` (👥 Users & Roles) — owner/cashier ko bina admin banaye
+cashier passwords reset karne ki ijazat di ja sakti hai.
+
+**Tests:** `test_recovery.mjs` (root) 13 ✓ — valid code accepted, wrong user, expiry, doosra PC,
+tampered payload, replay, device-agnostic emergency code, temp-password format.
+
+
+### 15M-1. IT Admin password: username nahi hota — recovery se reset
+
+**Client ka sawal:** "user name for itadmin to login and password?"
+
+**Jawab:** `ITAdmin@123` koi LOGIN nahi hai. Yeh ek **taala** hai jo andar login hone ke baad
+maanga jata hai (Settings Save, Cloud Sync Advanced, Google Drive, Subscription, Logo).
+Iska **koi username nahi**. Pos login = `admin` / (pehli dafa `Admin@123`).
+
+**Naya:** Vendor Recovery Code ab `itadmin` slot ko bhi reset kar sakta hai —
+Username field mein **`itadmin`** likh kar code lagayein → temp password milta hai →
+Settings → 🔐 Password & Credential Security → Change IT Admin Password mein daal kar naya set karein.
+Data, orders, users — sab safe rehte hain; sirf yeh taala badalta hai.
+
+
+---
+
+## 15N. Dashboard Privacy Mode (👁️) — client ki request
+
+**Client:** "This Month ki poori details (sales, received, net profit…) dikh rahi hain — blur/hidden ho
+jayein taake kisi ko amount na dikhe. Wahaan eye icon ho; click karne par amount proper visible ho jaye."
+
+**Fix (`assets/js/pages/dashboard.js`):**
+- Naya helper `M(v)` — dashboard ke **17 money figure** isi se guzarte hain (This Month 3 cards,
+  Money-by-Source 4 cards, Today's 6 cards, payments table, chart, drawings banner).
+- Default: `.amt-hidden { filter: blur(6px) }` + `user-select:none` (copy bhi nahi hota) +
+  `pointer-events:none`. Tooltip mein sirf "👁️ dabayein" — amount **nahi**.
+- Header par pill button **👁️ Dikhayein / 🙈 Chhupayein** (`.priv-bar`), title ke sath.
+- Choice `localStorage['mdcDashPriv'] = 'show'|'hide'` — **per device yaad**, default = hidden.
+- `@media print` mein bhi blur — print/screenshot se leak nahi.
+- Blur kiye amount se `data-amt` / `title` hata diye (F12 se bhi value na mile).
+- **Orders ki ginti (248) visible** rehti hai — woh amount nahi, ginti hai.
+
+**Tests:** `tpriv.js` 13 ✓ (static) · `tpriv2.js` 16 ✓ (real render: 16 blur elements,
+click → `filter:none`, dobara click → blur, reload par choice yaad).
+
+**Preview:** `preview-dashboard-privacy.html` (app folder ke andar, standalone demo — click karke dekh sakte hain).
+
+
+---
+
+## 15O. Client round — 7 requests (invoice improvements)
+
+| # | Request | Status | Kahan |
+|---|---|---|---|
+| 1 | **Previous Remaining Balance** — invoice banate waqt purana baqi add ho, aur agli dafa system khud dikhaye (red) | ✅ | `pos.js` (`posState.prevBalance`, `customerOpenBalance()`, cart summary ka "Purana Baqi" box, booking form ka red banner, payment step ka breakup) |
+| 2 | Contact number **mandatory na rahe** | ✅ | `pos.js` booking form (`Contact Number (optional)`; khali number par duplicate customer name se match hota hai) |
+| 3 | Invoice ke baad **customer name / number edit** | ✅ | `orders.js` → invoice list ke customer cell par ✏️ (`openEditCustomerQuick`) — admin only, audit log |
+| 4 | **Back-date invoice** (sirf admin) | ✅ | `pos.js` booking form → "🔙 Purani tareekh (backdate) — sirf Admin" (`bBackDate`), `createdAt` usi din ka |
+| 5 | Invoice **PDF** WhatsApp par | ✅ | `assets/js/invoice-pdf.js` + local `assets/js/jspdf.umd.min.js`; invoice screen → **📄 PDF** → Share (phone: WhatsApp sheet, PC: download) |
+| 6 | **Task Board** par customer naam + number | ✅ | `taskboard.js` (screen cards + printed task board; WhatsApp link bhi) |
+| 7 | Orders list mein **Paid On** column | ✅ | `orders.js` (`lastPaymentDate()` — tareekh, waqt aur "kitne din pehle") |
+
+### 1) Purana baqi — kaam kaise karta hai
+- Har order par `due` = us invoice ka baqi. Customer ka **khula balance** = us ke tamam chalu orders ke `due` ka jama.
+- Cart par **📋 Purana Baqi** box (staff register se amount likhta hai) → `total = currentBill + prevBalance`,
+  `due = total − paid`. Discount sirf **current bill** par lagta hai, purane baqi par nahi.
+- Customer chunte hi booking form par **red banner**: "Is customer ka PURANA BAQI Rs. X hai" + **➕ Add to this invoice**.
+- Order par save hota hai: `currentBill`, `prevBalance`. Receipt/PDF/slip par "Purana Baqi" line.
+
+### 2) Phone optional
+Duplicate customer check: phone ho to phone se, warna naam se (case-insensitive).
+
+### 3) Customer edit
+Invoice list → customer cell ka ✏️ → Name / Phone / Address → Save. Duplicate number block, activity log entry.
+(Invoice ki apni values customer record se aati hain, is liye purani invoice dobara print karne par naya naam aata hai.)
+
+### 4) Backdate
+Admin ko booking form mein date field (max = aaj). Khali = aaj. Payment step ka purana backdate field bhi barqarar hai.
+
+### 5) Invoice PDF
+- 80mm roll style, **1 page par 2 copies** (CUSTOMER COPY + ✂ CUT HERE + OFFICE COPY) — thermal roll par seedha print bhi ho sakta hai.
+- Browser ka Web Share API: phone par PDF → WhatsApp chat; PC par download → attach.
+- jsPDF **local** hai (356 KB, `assets/js/jspdf.umd.min.js`) — internet nahi chahiye, PWA offline chalta hai.
+- `tpdf.js` 13 ✓ (PDF valid, 2 copy labels, invoice #, items, grand total, purana baqi, customer).
+
+### 7) Paid On
+`lastPaymentDate()` = sab se aakhri `paymentsLog` entry (warna `paidAt`/`createdAt` agar paid>0).
+List mein: `12 Nov 2026` + `04:35 PM · 2 din pehle` — pata chalta hai payment kab mili.
+
+### Tests
+`tprevbal.js` 13 ✓ · `tpdf.js` 13 ✓ · baqi suites (tprintiframe, tprintfix, tpriv, tpriv2, tdcprint, tdelcharge, tpress, tcloudauto, tinvoices, test_recovery, tloginreset, titadmin) green.
+Version: `?v=20261122.8`, sw `v50`.
+
+
+---
+
+## 15P. Shop timings + Terms & Conditions (client ne 24 Nov 2026 ko diye)
+
+### Timings (client ke message ke mutabiq)
+```
+SHOP TIMINGS
+Mon - Thu: 10:00 AM - 9:00 PM
+Friday:   10:00 AM - 12:30 PM  |  2:00 PM - 9:00 PM (after Namaz)
+Saturday: 10:00 AM - 9:00 PM
+Sunday:   Closed
+```
+- `CLIENT_CONFIG.shopTimingText` (invoice / portal / PDF) aur
+- `CLIENT_CONFIG.shopHours` (portal ka **Open Now / Closed** badge; Friday ka break bhi)
+- Portal parser ne pehle `1:30 PM - 2:00 PM` Friday break likha tha — ab **12:30 PM / 2:00 PM** ho gaya.
+
+### Terms & Conditions (client ki printed slip se, 9 sharten)
+`CLIENT_CONFIG.invoiceTerms` — heading + 9 numbered points (refuse right, old/damaged at customer's risk,
+opinion final, delay, liability = half cost, whoever presents receipt, lost receipt, 10-din rule, curtain colour).
+
+### "Baar baar save na karna pare" — migration
+`db.js` load par (idempotent):
+- `timingsCustom` / `termsCustom` flag — owner Settings / Invoice Customize se badle to app **overwrite nahi** karta.
+- Warna khali / purani default value (jaise `Items not collected within 30 days…`, `8:00 AM - 1:00 PM`) **khud replace** ho jati hai.
+- Purane browser profile, cloud se aaya data — sab par yeh lagta hai; client ko Settings kholne ki zaroorat nahi.
+
+### Invoice par dikhna
+- Thermal slip: "SHOP TIMINGS" block + `TERMS & CONDITIONS` heading + 9 points, chhote font me (paper par fit).
+- PDF: har copy ke neeche timings (wrap) + poore terms (wrapped, numbers bold).
+- **Sirf customer copy** par terms — office copy compact rehti hai.
+
+### Files badle
+`client-config.js` (timings + terms), `db.js` (BRAND.termsText + migration), `invoice.js` (terms block + customize me bara box),
+`invoice-pdf.js` (timings wrap + terms), `settings.js` (timings box 6 rows + `timingsCustom`).
+
+### Tests
+`tshopinfo.js` 18 ✓ — timings parse, 9 terms, purani install migration, **owner ke custom values safe**, khali values bhar jati hain.
+Version: `?v=20261122.9`, sw `v51`.
+
+---
+
+## 15Q. Invoice: logo MUST + ek page + CUT aakhir me + office copy alag page + CelineSoft credit
+**Client ki requirement (24 Nov 2026):** *"BRAND ka logo must hai invoice p"*, *"invoice chaye kitni b bhari ho print page 1 p he hogi"*,
+*"iska ju cut hai woh pooori invoice print hone k baad hoga"*, *"office copy b alag nikelygi"*, aakhir me developer logo + naam + number.
+
+### Kya kiya
+1. **Logo kabhi na chhute** — `invoiceLogoSrc()` helper: pehle owner ka uploaded `logoImage`, warna bundled
+   `assets/img/brand-logo.png`. Customer slip ka `logoBlock` ab **unconditional** hai (pehle `showLogo ?` ke andar tha),
+   office copy aur thermal (1-bit) mode bhi same rule par. PDF me logo `assets/js/brand-assets.js` (embedded, 32 KB JPEG)
+   se aata hai — file missing ho jaye tab bhi logo print hota hai.
+2. **Ek page par poora invoice** — `utils.js` print doc me `fitSlipsToPage()`: print se pehle har `.print-slip` ki asli
+   height naapta hai aur agar page (297 mm − 10 mm safety) se bari ho to `transform: scale()` se chhota karta hai
+   (width ulta barhti hai, is liye line-wrapping bilkul same rehti hai). Minimum 42% tak. CSS me `.print-slip { page-break-inside: avoid }`.
+3. **CUT line sirf poori invoice ke baad** — HTML slip me CUT page ke aakhir par; PDF me terms → CelineSoft credit →
+   phir `CUT HERE` (dono taraf dashed, beech me saaf text, pehle '- - -' text line ke ooper aa raha tha).
+4. **Office copy apni ALAG copy/page** — HTML print me `.print-page-break` + page-break CSS; PDF me `doc.addPage([80,297])`.
+   Office copy ka format bhi naya: `kv` table (Booked / Delivery / Customer / Phone / Pieces / Cashier),
+   items + rate, Gross / Discount / **Purana Baqi** / Delivery / **NET TOTAL** / Paid / **DUE**. Compact copy
+   (terms sirf customer copy par) taake apni page par poora aa jaye.
+5. **CelineSoft credit invoice ke aakhir me (dono copies)** — `buildDeveloperCredit()`:
+   `assets/img/celinesoft-thermal.png` (transparent, thermal-safe — dark background 1-bit printer par black dabba ban jata tha)
+   + `Designed & Developed by: CelineSoft` + `Contact: 0302-8244803`. PDF me bhi wahi (embedded PNG), office copy par single line.
+6. `invoiceShowTerms` ab **default ON** (pehle `=== true` tha is liye terms chhup jate the).
+7. Print CSS ke `td:first-child { 46% }` ne `.dev-credit` / timings jaise poore-chaurai blocks ko squeeze kar diya tha →
+   inhein `.block-wide` / `.dev-credit` par `width:100%` de diya. Invoice no. / phone / tareekh `.nw` (nowrap) — ab tootta nahi.
+
+### Nayi files
+- `assets/js/brand-assets.js` — embedded brand logo (JPEG) + CelineSoft logo (PNG) → PDF ke liye (offline bhi chalega).
+- `assets/img/celinesoft-thermal.png` — 393×115 transparent thermal-safe CelineSoft logo.
+- `assets/img/celinesoft-logo.png`, `celinesoft-credit.png`, `celinesoft-badge.png` — upload se banaye gaye variants.
+
+### Tests
+`tfitoffice.js` (naya, 26 ✓) — logo must, credit text, office copy alag page, one-page CSS + auto-fit, real iframe print.
+`tpdf.js` +4 ✓ (credit order, CUT se pehle, office copy alag page). `tprintfix.js` / `tprintiframe.js` column widths update.
+Sab suites green: tshopinfo, tprevbal, tpdf, tprintfix, tprintiframe, tpriv, tpriv2, tfitoffice, test_recovery.
+Version: `?v=20261123.0`, sw `modern-dry-cleaners-pos-v52` (precache me brand-assets + celinesoft-thermal).
+
+---
+
+## 15R. Invoice header: INVOICE NO. / PIECES / PACKAGING — bare bold center
+**Client ne photo share ki (24 Nov 2026):** *"Pieces showing woh itna chota chota hogaya hai... even invoice number bhi.
+I want ke INVOICE number BIG BOLD show ho aur center mein show... proper number of pieces show ho big...
+aur Hanger, Fold ya Mix wagera show ho, taqai customer ko proper details milein."*
+
+### Kya badla
+- **Invoice No.**: ab alag full-width box (3px border), label `INVOICE NO.` center, number **~2.5× font** bold center
+  (`invoiceNoSize`, `.inv-big-no`, nowrap — kabhi tootta nahi). HTML slip + PDF dono me.
+- **Pieces**: chhota gol circle khatam → `PIECES` box, number **~2.6× font** bold (`piecesSize`).
+- **Packaging**: naya box `PACKAGING` + bara label — `HANGER` / `FOLD` / **`MIXED`** (`both` ka purana label "BOTH / MIXED" tha).
+- **Emoji hata diye** (`🧥 📦 🧺`) — thermal printer par ye dabbe ban jate hain; ab sirf saaf TEXT.
+- Office copy par bhi wahi header (bara number + Pieces + Packaging boxes). Duplicate "Pieces" kv row hata di.
+- PDF (`invoice-pdf.js`): `roundedRect` me bara `#INV-xxxx` (15.5pt, customer / 12pt office), neeche do boxes
+  PIECES (13pt) + PACKAGING (9.2pt). Total height sirf ~32mm — customer copy ab bhi **ek page** par (2 page = customer + office).
+- 1-bit thermal ke liye sab border solid black, koi shading nahi.
+
+### Tests
+`tfitoffice.js` +7 ✓ (bara number, pieces, packaging 3 labels, emoji-free, center) — total 33 ✓.
+Baqi suites green: tpdf (2 page: customer + office, credit/cut order), tprintfix, tprintiframe, tshopinfo, tprevbal, tpriv, tpriv2, test_recovery.
+Version: `?v=20261123.1`, sw `modern-dry-cleaners-pos-v53`.
+
+---
+
+## 15S. "CUT HERE" sirf printer par + CelineSoft credit page 1 par
+**Client (24 Nov 2026):** *"invoice ka ju page hai woh CelineSoft aur contact details hai uske baad cut ho... yeh Software Designer ki
+details bhi page 1 mein hi adjust karo... aur ju yeh CUT HERE likha hai woh jab invoice print hogi ya customer ko invoice jayegi
+PDF us mein show toh nahi hoga na?"*
+
+### Jawab / behaviour
+- **PDF (customer ko WhatsApp/e-mail):** ab customer copy par **CUT HERE nahi** aata. Sirf 2 page: page 1 = poori invoice
+  (logo, INV no., pieces, packaging, customer, items, totals, timings, terms, **CelineSoft credit**), page 2 = OFFICE COPY.
+  Code: `buildInvoicePdf(order, { cutLine: true })` — sirf printer wali slip me cut line aati hai (`wantCut`).
+- **HTML print (printer):** CUT line kabhi bhi page 1 ke aakhir par hi lagti hai (content ke beech me nahi).
+- **CelineSoft credit page 1 par fit:** print CSS compact kiya (`@media print`): logo 15mm, terms heading 8.6px /
+  points 7.2px (parhne ke qabil), credit logo 9mm, section margins 2px. Naapa gaya: **customer slip = 244 mm of 297 mm** →
+  aaram se ek page par, aur auto-fit (scale) reserve mein hai agar owner items/terms zyada kare.
+- Office copy par bhi CelineSoft logo + naam + number (chhota, PDF me bhi).
+- PDF me invoice-no box ki height fix (16mm) — number ab box ke andar center, office copy me bhi.
+
+### Tests
+`tpdf.js` +2 ✓ (customer PDF me CUT nahi; office copy alag page). Sab suites green.
+Version: `?v=20261123.2`, sw `modern-dry-cleaners-pos-v54`.

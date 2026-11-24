@@ -1,4 +1,4 @@
-const CACHE_NAME = 'modern-dry-cleaners-pos-v43';
+const CACHE_NAME = 'modern-dry-cleaners-pos-v54';
 const urlsToCache = [
   './',
   './index.html',
@@ -8,6 +8,8 @@ const urlsToCache = [
   './assets/css/expenses.css',
   './assets/img/logo.png',
   './assets/img/brand-logo.png',
+  './assets/img/celinesoft-thermal.png',
+  './assets/js/brand-assets.js',
   './assets/js/app.js',
   './assets/js/auth-recovery.js',
   './assets/js/it-core.js',

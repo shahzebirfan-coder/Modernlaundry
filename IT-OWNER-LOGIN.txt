@@ -1,0 +1,50 @@
+IT OWNER (vendor / CelineSoft) — login details
+===============================================
+
+1. POS me login (orders, settings, sab kuch)
+   Username : admin
+   Password : Admin@123        <- sirf pehli dafa; badal chuka ho to Vendor Recovery Code
+   (pos ka doosra user: aibot / aibot123)
+
+2. IT ADMIN PASSWORD (sensitive kaam ke liye alag password)
+   Password : ITAdmin@123
+   Kahan maanga jata hai:
+     • Settings → "Save" (settings save karna)
+     • Settings → 🔓 Cloud Sync — Advanced (IT Admin)
+     • Settings → Google Drive settings
+     • Demo & Subscription (expiry badalna)
+     • Logo badalna
+   NOTE: Yeh POS login nahi hai — yeh us waqt maanga jata hai jab aap andar
+   login ho kar koi sensitive cheez badalna chahein.
+
+3. AGAR "Incorrect IT ADMIN Password" aaye
+   Iska matlab: kisi ne ek dafa yeh password badal diya hai (Settings →
+   🔐 Password & Credential Security → Change IT Admin Password).
+   Us ke baad ITAdmin@123 kaam nahi karta — usi tarah jaise admin ka
+   Admin@123 kaam nahi kar raha tha.
+
+   Hal (in order):
+   a) Jo banda us waqt tha us se naya password poochein.
+   b) admin ke account se login ho jaye to 2 minute ka data-export + fresh
+      profile me app dobara set (seed wapas aa jata hai).
+   c) Vendor Recovery Code (login screen → Forgot Password → Vendor Recovery
+      Code) se admin login hasil karein, phir Settings me IT password reset
+      kar lein — magar purana IT password phir bhi chahiye hoga.
+   d) Aakhri hal: main (vendor) ek naya build banaun jisme IT password ka
+      verifier reset ho — is ke liye app ka "cloud-check" report chahiye,
+      data safe rehta hai, sirf IT password reset hota hai.
+
+4. RECORD RAKHNE KA BEHTAR TAREEQA (recommended)
+   - POS admin ka password  : ____________________   (badalne ke baad likh lein)
+   - IT Admin password      : ____________________
+   - Master Recovery Code   : ____________________   (Settings me set karein)
+   - Live Dashboard PIN     : ____________________
+   Yeh page print kar ke locker me rakhein — WhatsApp me screenshot na bhejein.
+
+5. DIFFERENCE (yaad rakhein)
+   POS login      = app khulta hai (admin / Admin@123)      -> "kaun kaam kar raha hai"
+   IT Admin pass  = sensitive settings ka taala             -> "kaun badlaav kar sakta hai"
+   Live PIN       = live.html owner dashboard               -> "kaun owner dashboard dekh sakta hai"
+
+SECURITY: yeh values HANDOVER-CREDENTIALS.md me likhi hain. Owner ko dein aur
+file project folder se DELETE kar dein.

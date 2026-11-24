@@ -1,0 +1,48 @@
+ADMIN LOGIN — kyun error aata hai aur abhi kya karein
+=====================================================
+
+WAJAH (test se sabit)
+---------------------
+Build ka pehla password "Admin@123" sirf PEHLI DAFAA chalta hai.
+Us account se ek dafa login ho gaya, ya password kisi ne badal diya, to purana
+password KHATAM ho jata hai (security feature — password hashed form me rakha jata hai).
+"aibot" is liye khulta hai ke us ka password kabhi nahi badla.
+
+ABHI LOGIN KARNE KE 2 RASTE
+---------------------------
+
+RASTA 1 — VENDOR RECOVERY CODE (recommended, internet ki zaroorat nahi)
+1. Login screen → "Forgot Password?" → "Vendor Recovery Code"
+2. Wahan neeche "IT owner ko yeh tag bhejein: XXXXXXXXXX" — woh tag copy karein
+3. Woh tag IT owner ko WhatsApp karein
+4. IT owner ek chhota code bhejega (MDC1.se shuru)
+5. Woh code wahan paste karein → Unlock → app ek TEMPORARY PASSWORD dikhayega
+6. Us temp password se login karein → app foran "Naya password set karein" maangega
+7. Apna naya password likh dein — bas, ab admin se login ho jayega
+   (Yeh code sirf ek dafa aur sirf usi computer par chalta hai.)
+
+RASTA 2 — aibot se andar ja kar khud reset karein (agar aibot ka password pata ho)
+1. aibot / aibot123 se login karein
+2. Users page kholein (agar nahi khulta to us user ko "👥 Users & Roles"
+   permission chahiye — admin se karwaein)
+3. "admin" user ke aage 🔑 Reset Pass dabayein
+4. Naya password likhein (2 dafa) → 🔑 Reset Password
+5. Logout → naye password se admin login
+
+OWNER KE PAAS APNA ALAG ACCOUNT (recommended)
+---------------------------------------------
+aibot ko bech dein / band kar dein aur owner ke naam se ek account bana lein:
+1. admin se login → Users → "➕ Add User"
+2. Name: Owner ka naam · Username: owner · Role:  Cashier (credentials dein)
+3. Save → phir us user ke aage "🔐 Permissions" → sab pages tick karein
+   (Delete/Edit invoices jaise sensitive kaam chhor sakte hain)
+4. ab owner apne username se login karega, admin ka password sirf IT ke paas rahega
+   — dono ka password alag, kisi ko nahi batana parega.
+
+AAGE KE LIYE 3 EHTIYAT
+----------------------
+1. Settings → 🔑 Master Recovery Code — ek code set kar lein (yeh aap khud reset kar sakenge)
+2. Har user ke liye secret security question set karein (Users → Edit)
+3. Apne passwords kisi diary/ password manager me — screenshot WhatsApp me na bhejein
+
+Note: "Cancel" ya Reset se koi order/data zaya nahi hota. Users, sales sab mehfooz rehte hain.

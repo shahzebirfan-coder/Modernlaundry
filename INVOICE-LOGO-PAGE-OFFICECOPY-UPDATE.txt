@@ -1,0 +1,41 @@
+MODERN DRY CLEANERS — INVOICE UPDATE
+Version ?v=20261123.0   |   Service worker: modern-dry-cleaners-pos-v52
+Date: 24 Nov 2026
+
+Aap ki 5 baatein — sab ho gayi:
+
+1) "BRAND ka logo must hai invoice p"
+   - Ab logo KABHI nahi chhutta. Owner ne apna logo upload kiya ho to wohi,
+     warna company ka default logo (Modern Dry Cleaners) print hota hai.
+   - Customer copy, office copy, thermal (mono) print aur PDF — chaaron jagah.
+   - PDF me logo embedded hai, is liye internet ya file missing ho tab bhi print hota hai.
+
+2) "Invoice chaye kitni bhi bhari ho — page 1 par hi hogi"
+   - Print se pehle system slip ki height naap kar usko page ke andar fit karta hai
+     (text chhota hota hai, kuch bhi page 2 par nahi jata).
+   - Kaghaz: 80mm roll, ek page = 297mm.
+
+3) "CUT line poori invoice print hone ke baad"
+   - Ab CUT line terms + CelineSoft credit ke BAAD aati hai (pehle terms ke beech aa jati thi).
+
+4) "Office copy bhi alag niklegi"
+   - CUSTOMER COPY page 1, OFFICE COPY page 2 — poori alag copy.
+   - Office copy ka naya saaf format: Booked / Delivery / Customer / Phone / Pieces / Cashier,
+     phir items (rate ke sath), phir Gross / Discount / Purana Baqi / Delivery / NET TOTAL / Paid / DUE.
+
+5) "Aakhir me developer logo + naam + contact"
+   - LOGO + "Designed & Developed by: CelineSoft" + "Contact: 0302-8244803"
+   - Dono copies ke aakhir me.
+
+Sath hi:
+   - Terms & Conditions ab default tor par invoice par chhapte hain (9 points).
+   - Invoice No., phone aur tareekh ab tootte nahi (ek hi line me).
+   - Shop timings waisi hi: Mon-Thu 10-9, Friday 10:00-12:30 | 2:00-9:00 (after Namaz), Sat 10-9, Sunday Closed.
+
+Update kaise lagayein:
+   - Purana folder back-up rakhein, naya zip extract karein, Chrome me kholein.
+   - Pehli dafa kholne par service worker khud update ho jayega (v52). Agar purana print aaye to
+     Ctrl+Shift+R dabayein (ya browser band kar ke dobara kholein).
+   - Koi setting dobara save karne ki zaroorat NAHI — sab default me baked hai.
+
+Proof: "Modern Dry Cleaners - Invoice Proof (logo + credit + office copy).pdf" — 2 page (customer + office copy).

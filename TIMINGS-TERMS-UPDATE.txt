@@ -1,0 +1,44 @@
+SHOP TIMINGS + TERMS & CONDITIONS — update ho gaya
+=================================================
+
+1) SHOP TIMINGS (client ke message ke mutabiq)
+   Mon - Thu : 10:00 AM - 9:00 PM
+   Friday    : 10:00 AM - 12:30 PM  |  2:00 PM - 9:00 PM (Namaz ke baad)
+   Saturday  : 10:00 AM - 9:00 PM
+   Sunday    : Closed
+
+   Kahan dikhega:
+   - Invoice / receipt ke neeche (thermal print)
+   - Invoice PDF me
+   - Customer portal (portal.html) ke timings card me
+   - Portal ka "Open Now / Closed" badge ab inhi timings par chalta hai
+     (Friday 12:30 se 2:00 tak "Closed — Namaz break")
+
+2) TERMS & CONDITIONS (client ki printed slip se, 9 sharten)
+   Invoice ke neeche chhote font me chhapte hain:
+   1. The right to refuse or accept clothes is reserved.
+   2. Old, discoloured, stained and damaged clothes are accepted entirely at customer's risk.
+   3. Our opinion of the condition of the clothes ... is final and binding on the customer.
+   4. Every effort is made to deliver on the due date but no responsibility for delay.
+   5. In case of damage/loss ... liability not to exceed the half cost.
+   6. Clothes delivered to anyone who presents this receipt.
+   7. Lost receipt — written intimation with receipt number.
+   8. Clothes not received within 10 days of due date — at customer's risk.
+   9. Curtain colour matching — management not responsible.
+
+   NOTE: Customer copy par poore terms; office copy compact rehti hai.
+
+3) "BAAR BAAR SAVE NA KARNA PARE" — yeh khud lag jata hai
+   - Naya build kholein -> Ctrl + Shift + R -> bas.
+   - Settings kholein ya Save dabane ki zaroorat NAHI.
+   - Purane browser data/cloud data par bhi yeh khud apply hota hai.
+   - Agar owner khud Settings se timings ya terms badalna chahe to:
+       Settings -> Shop Timings  |  Invoice -> Customize -> Terms & Conditions
+     Us ke baad app unhein overwrite NAHI karega (owner ki value safe rehti hai).
+
+4) KYA DIKHEGA (PDF sample)
+   "Modern Dry Cleaners - Sample Invoice (with terms).pdf" — asli PDF format dekh sakte hain.
+
+--------------------------------------------------------------------------------
+Version: ?v=20261122.9  |  cache v51  |  tests: 18 ✓ (timings, terms, migration)
+--------------------------------------------------------------------------------

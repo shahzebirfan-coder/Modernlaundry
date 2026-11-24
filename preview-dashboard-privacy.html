@@ -1,0 +1,70 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard privacy — preview</title>
+<style>
+  :root{--surface:#fff;--border:#dbe3ee;--text:#0f172a;--soft:#64748b;}
+  *{box-sizing:border-box}
+  body{margin:0;padding:18px;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f8fb;color:var(--text)}
+  .wrap{max-width:1100px;margin:0 auto}
+  .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:linear-gradient(135deg,#f1f5f9,#e2e8f0);border:1px solid #cbd5e1;border-radius:12px;padding:10px 14px;margin-bottom:14px}
+  .bar h1{font-size:16px;margin:0}
+  .side{display:flex;align-items:center;gap:8px}
+  .side .hint{font-size:11.5px;color:#475569;font-weight:600}
+  #eye{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;border:1.5px solid var(--border);background:#fff;color:var(--text);font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit;transition:.15s}
+  #eye:hover{border-color:#0b3f80;background:#f0f7ff}
+  #eye.on{background:#0b3f80;border-color:#0b3f80;color:#fff}
+  .sec{font-size:13px;font-weight:800;color:#334155;margin:16px 0 8px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .card{display:flex;gap:11px;align-items:center;border-radius:12px;padding:12px;border:1px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:#fff;font-size:19px;flex:0 0 40px}
+  .lbl{font-size:10.5px;color:#6b7280;font-weight:600}
+  .val{font-size:18px;font-weight:800;margin-top:1px}
+  .amtv{display:inline-block;font-variant-numeric:tabular-nums}
+  .amt-hidden{filter:blur(6px);user-select:none;-webkit-user-select:none;pointer-events:none;cursor:default}
+  .note{font-size:11.5px;color:var(--soft);margin-top:14px;line-height:1.5}
+</style></head><body><div class="wrap">
+  <div class="bar">
+    <h1>📊 Dashboard — This Month</h1>
+    <div class="side"><span class="hint" id="hint">Amounts chhupaye hue hain</span>
+      <button id="eye" type="button">👁️ Dikhayein</button></div>
+  </div>
+
+  <div class="sec">🗓️ THIS MONTH (NOVEMBER 2026)</div>
+  <div class="grid" id="g1"></div>
+
+  <div class="sec">💰 Money Balance by Source</div>
+  <div class="grid" id="g2"></div>
+
+  <p class="note">
+    Yeh sirf preview hai (asli dashboard jaisa hi CSS). 👁️ dabayein → sab amounts saaf.
+    Asli app mein: <b>Dashboard</b> par hi yeh button hai, choice har device par yaad rehti hai,
+    aur <b>print</b> par amounts blur hi rehte hain (screenshot/print se leak nahi hota).
+    Orders ki ginti (248) visible rehti hai — amount nahi.
+  </p>
+</div>
+<script>
+const month=[['💰','#6366f1','Sales','Rs. 172,722','#0f172a','linear-gradient(135deg,#eef2ff,#fff)'],
+ ['✅','#22c55e','Received','Rs. 102,837','#16a34a','linear-gradient(135deg,#f0fdf4,#fff)'],
+ ['📊','#22c55e','Net Profit','Rs. 17,160','#16a34a','linear-gradient(135deg,#f0fdf4,#fff)']];
+const src=[['💵','#22c55e','Cash Drawer','-Rs. 149,615','#16a34a','linear-gradient(135deg,#dcfce7,#f0fdf4)'],
+ ['📱','#f59e0b','JazzCash','Rs. 20','#d97706','linear-gradient(135deg,#fef3c7,#fffbeb)'],
+ ['📱','#3b82f6','Easypaisa','Rs. 404','#2563eb','linear-gradient(135deg,#dbeafe,#eff6ff)'],
+ ['🏦','#8b5cf6','Bank','Rs. 0','#7c3aed','linear-gradient(135deg,#e9d5ff,#f5f3ff)']];
+const card=(ic,bg,lbl,val,vc,b)=>`<div class="card" style="background:${b}">
+  <div class="ic" style="background:${bg}">${ic}</div>
+  <div><div class="lbl">${lbl}</div><div class="val" style="color:${vc}"><span class="amtv amt-hidden" title="Dikhane ke liye 👁️ dabayein">${val}</span></div></div></div>`;
+document.getElementById('g1').innerHTML = month.map(a=>card(...a)).join('') +
+  `<div class="card" style="background:linear-gradient(135deg,#ecfeff,#fff)"><div class="ic" style="background:#0e9ad2">📦</div>
+   <div><div class="lbl">Orders</div><div class="val">248</div></div></div>`;
+document.getElementById('g2').innerHTML = src.map(a=>card(...a)).join('');
+
+const btn=document.getElementById('eye'), hint=document.getElementById('hint');
+let show=false;
+function paint(){
+  document.querySelectorAll('.amt-hidden').forEach(el=>el.style.filter = show?'none':'');
+  btn.classList.toggle('on',show);
+  btn.textContent = show?'🙈 Chhupayein':'👁️ Dikhayein';
+  hint.textContent = show?'Amounts visible':'Amounts chhupaye hue hain';
+}
+btn.onclick=()=>{ show=!show; paint(); };
+paint();
+</script></body></html>

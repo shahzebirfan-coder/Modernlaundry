@@ -1,0 +1,53 @@
+"See more / More settings" click par nahi khulta — Chrome ka hal
+===============================================================
+
+Yeh Chrome (ya Edge) ka apna bug hai: print preview ka panel freeze ho jata hai.
+App ka koi masla nahi. Neeche 4 hal hain — Step 1 sab se tez hai.
+
+STEP 1 (SAB SE TEZ) — System dialog
+-----------------------------------
+1. Print dialog khula hone par keyboard par: Ctrl + Shift + P
+   (ya print preview ke bilkul neeche chhota link: "Print using system dialog…")
+2. Windows ka apna print dialog khulega.
+3. Wahan yeh sab change hota hai:
+     Paper size : 80mm Roll  (ya jo roll ho)
+     Margins    : None / Minimum
+     Scaling    : Default (100%)
+     Orientation: Portrait
+   → Print
+
+STEP 2 — Purana preview band + Chrome restart
+--------------------------------------------
+1. Atki hui print tab band karein (X) — Esc se na band ho to tab ka X
+2. Address bar mein likhein:   chrome://restart   → Enter
+   (Chrome khud band ho kar wapas khul jayega)
+3. POS dobara kholein → Ctrl + Shift + R → print
+
+STEP 3 — Chrome ka print preview reset
+--------------------------------------
+1. Address bar mein:   chrome://settings/content/all   → Enter
+2. Search:  "print"  → jo entries hon woh delete karein
+   (ya chrome://settings/privacy → Clear browsing data → Cookies + Cached images/files)
+3. Chrome restart kar ke dobara print karein
+
+STEP 4 — Agar phir bhi na chale: doosra browser
+----------------------------------------------
+Microsoft Edge (Windows mein pehle se hota hai) mein POS kholein → wohi invoice print karein.
+Edge ka print panel Chrome se alag hai aur zyada tar is masle mein theek chalta hai.
+(Aap ka data wohi rahega — data localStorage mein hai; agar Edge mein data na dikhe to
+ Settings → Cloud Sync ON kar lein, cloud se aa jayega.)
+
+MASLA KIS KA HAI — 30 second ka test
+-----------------------------------
+Chrome mein koi bhi simple page kholein (e.g. google.com) → Ctrl + P → "See more" dabayein
+  • wahan bhi nahi khulta  → Chrome/Windows ka masla (Step 2–4)
+  • wahan khulta hai       → us waqt POS ka print preview atka tha (Step 1 ya 2)
+
+YAAD RAHE
+---------
+• Printer settings "ek dafa" set karni hain:
+    Windows → Printers & scanners → BlackCopper 80mm Serial → Printing preferences
+    → Paper size: 80mm Roll, Margins: None
+    POS → Settings → Thermal Print Setup → Printable width = 72 → Save & auto-fit
+• Chrome mein Print se pehle koi purana print preview khula na rakhein.
+• "Cancel" se koi invoice zaya nahi hoti.

@@ -1,0 +1,30 @@
+MODERN DRY CLEANERS — INVOICE HEADER UPDATE
+Version ?v=20261123.1   |   Service worker: modern-dry-cleaners-pos-v53
+Date: 24 Nov 2026
+
+Aap ki baat: "Pieces itna chota hogaya, invoice number bhi... INVOICE number BIG BOLD center me ho,
+pieces bhi bara, aur Hanger / Fold / Mix show ho."
+
+Ab invoice ke ooper (customer ki photo jaisa):
+
+  +--------------------------------------+
+  |            INVOICE NO.               |
+  |            INV-3031                  |   <- BARA, BOLD, CENTER
+  +--------------------------------------+
+  +----------------+  +------------------+
+  |    PIECES      |  |    PACKAGING     |
+  |       4        |  |     HANGER       |   <- dono bare
+  +----------------+  +------------------+
+
+- Invoice number ka font pehle se ~2.5 guna bara, poori chaurai ka box, beech me — kabhi tootta nahi.
+- Pieces ka number bhi bara aur bold (pehle chote gol circle me tha).
+- Packaging box me: HANGER / FOLD / MIXED.
+- Emoji (🧥 📦 🧺) hata diye — thermal printer unko dabba bana deta tha, ab saaf TEXT aata hai.
+- Yehi header OFFICE COPY par bhi hai.
+- Office copy alag page par (page 2), CUT line poori invoice ke baad — sab pehle jaisa.
+
+Testing: sab 9 test suites pass (33 checks sirf header/logo/print ke).
+Version: ?v=20261123.1, service worker v53.
+Update ke baad pehli dafa Ctrl+Shift+R dabayein (purana cache hatane ke liye). Koi setting save karne ki zaroorat nahi.
+
+Proof: "Modern Dry Cleaners - Invoice Proof (logo + credit + office copy).pdf" (page 1 = customer, page 2 = office).

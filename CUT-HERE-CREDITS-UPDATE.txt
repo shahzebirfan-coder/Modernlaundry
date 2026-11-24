@@ -1,0 +1,26 @@
+MODERN DRY CLEANERS — CUT HERE + CELINESOFT CREDIT UPDATE
+Version ?v=20261123.2   |   Service worker: modern-dry-cleaners-pos-v54
+Date: 24 Nov 2026
+
+1) CUT HERE kahan dikhega?
+   - CUSTOMER KO BHEJNE WALI PDF (WhatsApp / e-mail / download): CUT HERE NAHI aata. ✅
+     Page 1 = poori invoice (logo, INV no., pieces, packaging, customer, items, total,
+     shop timings, terms & conditions, aakhir me CelineSoft logo + naam + contact).
+     Page 2 = OFFICE COPY.
+   - PRINTER WALI SLIP: CUT HERE sirf customer copy ke AAKHIR me (CelineSoft details ke baad)
+     aata hai — qainchi se kaatne ke liye. Content ke beech me kabhi nahi.
+
+2) CelineSoft (Software Designer) ki details page 1 par fit
+   - Logo chhota (15mm), terms thora compact, credit compact → poori invoice
+     244mm me samet jati hai (page 297mm). Aaram se ek page.
+   - Agar kabhi owner items ya terms zyada kare to system khud scale kar deta hai,
+     tab bhi sab kuch page 1 par hi rehta hai.
+   - Office copy par bhi CelineSoft logo + naam + number aata hai.
+
+3) PDF ka invoice-number box
+   - Number ab box ke andar bilkul center, box ki height fix — office copy par bhi saaf.
+
+Version: ?v=20261123.2, service worker v54. Update ke baad Ctrl+Shift+R.
+
+Proof: "Modern Dry Cleaners - Invoice Proof (logo + credit + office copy).pdf"
+       Page 1 = customer (CUT nahi), Page 2 = office copy.

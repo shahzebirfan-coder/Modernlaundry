@@ -1,0 +1,48 @@
+Chrome mein print preview "about:blank" par atak gaya — kya karein
+====================================================================
+
+Wajah (technical)
+-----------------
+POS pehle invoice ko ek NAYI chhoti window (popup) mein likh kar print karta tha.
+Chrome/Edge kabhi kabhi us window ko `about:blank` par hi chhor deta hai — print dialog
+khulta hai magar "More settings" load nahi hotin, preview blank rehta hai aur
+Print / Cancel buttons kaam nahi karte. Yeh app ki ghalti nahi, Chrome ka popup +
+document.write wala masla hai.
+
+AB SOFTWARE MEIN FIX HO GAYA
+----------------------------
+Print ab **popup window ke bagair**, page ke andar hi ek chhupi hui frame se hota hai —
+wahan `about:blank` aane ka sawal hi nahi, aur popup blocker bhi rukaawat nahi banta.
+
+Client ke liye 3 step
+---------------------
+1. Naya zip extract karein → `index.html` → login → Ctrl + Shift + R
+2. Invoice kholein → 🖨️ Print Both
+3. Print dialog mein:
+      Destination : BlackCopper 80mm Serial
+      Pages       : All
+      Layout      : Portrait
+      More settings → Paper size : 80mm Roll (ya jo roll ke liye ho)
+      Scale       : Default (100%)
+      Margins     : None / Minimum
+   → Print
+
+Agar phir bhi atak jaye (purana behaviour) — foran hal
+-----------------------------------------------------
+1. Us atki hui print tab/window ko **Cancel** ya **X** se band karein.
+2. POS tab par wapas aayein aur **Ctrl + Shift + R** dabayein (naya code load ho).
+3. Dobara print karein — ab iframe wala naya tareeqa chalega.
+4. Agar lazmi purana tab chal raha ho to Chrome mein `Ctrl + P` se pehle **Cancel** karein —
+   printing se pehle koi bhi purana print preview khula na rakhein.
+
+Printer settings ek dafa set karein (Windows)
+---------------------------------------------
+1. Windows → Settings → Bluetooth & devices → Printers & scanners → BlackCopper 80mm Serial
+2. Printing preferences → Paper size: **80mm Roll / 72mm** (jo receipt roll ka ho)
+3. POS → Settings → 🖨️ Thermal Print Setup → Printable width:
+       80mm roll → 72      (kinara kate to 70 → 68)
+       58mm roll → 52
+   → Save & auto-fit
+4. Windows print settings ek dafa save ho jati hain, baar baar set karne ki zaroorat nahi.
+
+Note: "Cancel" se printing ruk jati hai koi nuqsan nahi hota — invoice save ho chuki hoti hai.

@@ -1,0 +1,56 @@
+MODERN DRY CLEANERS — 7 NAYI CHEEZEIN (client ki request par)
+==============================================================
+
+1) PURANA BAQI (Previous Remaining Balance)
+   Kahan: New Sale (POS) → cart ke neeche "📋 Purana Baqi" box
+   • Register se purana baqi amount likh dein -> grand total me add ho jayega
+   • Discount sirf is invoice ke bill par lagta hai, purane baqi par nahi
+   • Jab customer ka naam/number enter karein aur us ka purana baqi mojood ho,
+     booking form par RED nahi, bara sa reminder aata hai:
+        "⚠️ Is customer ka PURANA BAQI Rs. X hai"  + button  ➕ Add to this invoice
+   • Har invoice par save hota hai (currentBill + prevBalance) — ledger/reports sahi rehte hain
+   • Receipt aur PDF par "Purana Baqi" line bhi aati hai
+
+2) CONTACT NUMBER AB LAZMI NAHI
+   • Booking form me "Contact Number (optional)"
+   • Number na ho to customer ka naam se match hota hai (duplicate na banta)
+
+3) CUSTOMER KA NAAM / NUMBER THEEK KARNA (invoice ban jane ke baad)
+   • Orders page -> invoice list -> customer ke naam ke sath ✏️ (pencil) dabayein
+   • Naam, number, address theek karein -> Save
+   • Admin only. Har change activity log me record hota hai
+   • Wohi customer ki saari invoices par naya naam aata hai
+
+4) BACK-DATE INVOICE (sirf ADMIN)
+   • Booking form me "🔙 Purani tareekh (backdate)"
+   • Bijli/internet band tha aur invoice nahi bani? Purani tareekh daal kar bana lein
+   • Khali chhorein = aaj ki tareekh (normal)
+
+5) INVOICE PDF (WhatsApp par bhejne ke liye)
+   • Invoice kholein -> naya button "📄 PDF"
+   • 📤 Share PDF  -> phone par: WhatsApp chunein -> chat chunein -> send
+                     -> PC par: PDF download hogi -> WhatsApp me 📎 se attach karein
+   • ⬇️ Download PDF -> file save
+   • PDF me dono copies ek hi page par: CUSTOMER COPY + ✂ CUT HERE + OFFICE COPY
+     (thermal roll par seedha print bhi ho sakta hai)
+   • Internet ki zaroorat nahi — PDF app ke andar hi banti hai
+
+6) TASK BOARD PAR CUSTOMER DETAILS
+   • Har card par ab: Invoice # + 👤 Customer naam + 📞 Number
+   • 📱 icon se seedha WhatsApp (delivery late hone ki info dene ke liye)
+   • "🖨️ Print Tasks" wale printout par bhi naam aur number aata hai
+
+7) ORDERS LIST ME "PAID ON" COLUMN
+   • Naya column "Paid On": payment ki tareekh + waqt + "kitne din pehle"
+   • Misaal: 12 Nov 2026 / 04:35 PM · 2 din pehle
+   • Payment nahi hui to "—"
+
+--------------------------------------------------------------------------------
+NAYA VERSION KAISE LAGAYEIN
+1. Purana folder backup rakhein
+2. Naya zip extract karein -> index.html kholein
+3. Login -> Ctrl + Shift + R (naya code load)
+4. Test: ek invoice banayein jisme purana baqi 500 likh kar dekhein,
+   phir 📄 PDF dabayein.
+--------------------------------------------------------------------------------
+Note: koi purana data/order kharab nahi hota. Naye fields sirf nayi invoices par lagte hain.
