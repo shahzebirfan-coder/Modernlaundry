@@ -139,6 +139,12 @@ const DB = {
         this._data.settings.brandBundleVersion = BRAND.version;
       }
 
+      /* purane orders ke pieces ek dafa theek karo (naye version par ek hi baar) */
+      if (this._data.settings && this._data.settings._piecesRecalcV !== 2) {
+        try { this.recalcOrderPieces(); } catch (e) { console.warn('pieces recalc skip', e); }
+        this._data.settings._piecesRecalcV = 2;
+      }
+
       /* Invoice numbering — start at 001, and keep counting from wherever the
          shop already is. Old builds began at 1001, so an existing profile is
          carried over from its highest invoice instead of jumping backwards. */
@@ -410,6 +416,10 @@ const DB = {
   all(table)  { return this._data[table] || []; },
   get(table, id) { return (this._data[table] || []).find(r => r.id === id); },
   insert(table, record) {
+    /* naya product: pieces-per-unit naam se khud set ho jaye (owner edit kar sakta hai) */
+    if (table === 'products' && record && record.piecesPerUnit == null) {
+      record.piecesPerUnit = this.guessPiecesPerUnit(record.name || '');
+    }
     record.id = record.id || (table[0] + Date.now().toString(36) + Math.floor(Math.random()*1000));
     record.createdAt = record.createdAt || new Date().toISOString();
     this._data[table].push(record);
@@ -661,6 +671,86 @@ const DB = {
   /* Press ki line — sirf "mojooda status" ke barabar (ready ke baad Press nahi) */
   isAtPress(status) {
     return status === 'ironing';
+  },
+
+  /* ============================================================
+     PIECES PER UNIT  (client ki requirement)
+     "Suit 3 Pcs" = 3 pieces, "Suit 2 Pcs" / "Shalwar Suit" / "Kurta Shalwar" = 2.
+     Product par `piecesPerUnit` set hota hai (Products page ka naya column).
+     Isi se invoice ka PIECES count aur Hanger/Shopper inventory sahi chalti hai.
+     ============================================================ */
+  piecesPerUnit(p) {
+    if (!p) return 1;
+    const n = parseInt(p.piecesPerUnit, 10);
+    if (Number.isFinite(n) && n > 0) return Math.min(50, n);
+    return this.guessPiecesPerUnit(p.name || '');
+  },
+
+  /* Naam se andaza (purane 108 rate-list items khud set ho jate hain).
+     Misal: "Suit 3 Pcs" → 3, "Suit 2 Pcs" → 2, "Shalwar Suit" → 2, "Kurta" → 2, "Shirt" → 1 */
+  guessPiecesPerUnit(name) {
+    const n = String(name || '').toLowerCase();
+    if (!n.trim()) return 1;
+    /* pehle saaf "3 pcs / 3pc" likha ho to wohi */
+    let m = n.match(/(\d+)\s*(?:pcs|pc|piece|pieces)\b/);
+    if (m) { const v = parseInt(m[1], 10); if (v > 0 && v <= 50) return v; }
+    /* 3-piece / 2-piece */
+    m = n.match(/(\d+)\s*-?\s*piece/);
+    if (m) { const v = parseInt(m[1], 10); if (v > 0 && v <= 50) return v; }
+    if (/\b(3|three)[\s-]*(pc|piece|pcs)/.test(n)) return 3;
+    if (/\b(2|two)[\s-]*(pc|piece|pcs)/.test(n)) return 2;
+    /* naam se: suit / shalwar / kurta / saya / bridal / 3-piece types */
+    if (/bridal|lehenga|gharara|sharara/.test(n)) return 3;
+    if (/3\s*pc|three\s*piece/.test(n)) return 3;
+    if (/safari suit|skirt suit|track suit|sherwani/.test(n)) return 2;
+    if (/kurta|shalwar|suit|saya|waistcoat|achkan|tuxedo/.test(n)) return 2;
+    return 1;
+  },
+
+  /* ============================================================
+     PURANE ORDERS KI RECALC (client: "purane orders bhi dobara calculate hon")
+     Har order line par `pieces` snapshot likh dete hain aur order par `pieces`
+     (total). Reports/invoice ab historical orders ka bhi SAHI pieces dikhayenge.
+     Idempotent — jitni baar chale, nateeja wohi. Numbers/amounts ko chhoota nahi.
+     ============================================================ */
+  recalcOrderPieces() {
+    let changed = 0;
+    const stamp = '2026-11-24-piece-recalc';
+    (this._data.orders || []).forEach(o => {
+      if (!o || !Array.isArray(o.items)) return;
+      let touched = false;
+      o.items.forEach(it => {
+        if (!it) return;
+        const want = this.linePiecesPerUnit(it);
+        if (+it.pieces !== want) { it.pieces = want; touched = true; }
+      });
+      const total = o.items.reduce((sum, it) => sum + Math.max(1, +it.qty || 1) * (+it.pieces || 1), 0);
+      if (+o.pieces !== total) { o.pieces = total; touched = true; }
+      if (touched) { o.piecesRecalcAt = stamp; changed++; }
+    });
+    if (changed) {
+      this.save();
+      console.log('[DB] pieces recalculated for ' + changed + ' purane orders');
+    }
+    return changed;
+  },
+
+  /* Ek order ka asli pieces = har line ki qty × pieces-per-unit */
+  orderPieces(o) {
+    if (!o || !Array.isArray(o.items)) return 0;
+    return o.items.reduce((sum, it) => {
+      const qty = Math.max(1, parseInt(it.qty || 1, 10) || 1);
+      return sum + qty * this.linePiecesPerUnit(it);
+    }, 0);
+  },
+  /* Order line ke liye pieces-per-unit: cart mein snapshot (`pieces`) na ho to product se */
+  linePiecesPerUnit(it) {
+    if (!it) return 1;
+    const snap = parseInt(it.pieces, 10);
+    if (Number.isFinite(snap) && snap > 0) return snap;
+    const prod = it.productId ? this.get('products', it.productId) : null;
+    if (prod) return this.piecesPerUnit(prod);
+    return this.guessPiecesPerUnit(it.name || '');
   },
 
   deliveryChargeLabel() {

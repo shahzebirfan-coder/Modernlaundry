@@ -136,7 +136,7 @@ function renderOrdersBody() {
       <td><b>${escapeHtml(c.name)}</b>
         ${DB.currentUser().role === 'admin' ? `<button class="btn btn-ghost btn-sm" data-act="editcust" data-id="${o.customerId}" title="Name / phone theek karein" style="padding:0 4px;font-size:11px;">✏️</button>` : ''}
         <br><small style="color:var(--text-soft);">${escapeHtml(c.phone||'—')}</small></td>
-      <td>${o.items.length} items<br><b style='color:var(--primary);'>${o.items.reduce((s,i)=>s+(i.qty||0),0)} pcs</b>${o.deliveryType?` <span class='badge' style='background:#f3f4f6;color:#374151;'>${o.deliveryType==='hanger'?'🧥':o.deliveryType==='fold'?'📦':'🧺'} ${o.deliveryType}</span>`:''}</td>
+      <td>${o.items.length} items<br><b style='color:var(--primary);'>${(typeof DB.orderPieces==='function'?DB.orderPieces(o):o.items.reduce((s,i)=>s+(i.qty||0),0))} pcs</b>${o.deliveryType?` <span class='badge' style='background:#f3f4f6;color:#374151;'>${o.deliveryType==='hanger'?'🧥':o.deliveryType==='fold'?'📦':'🧺'} ${o.deliveryType}</span>`:''}</td>
       <td><b>${fmtMoney(o.total)}</b></td>
       <td>
         ${o.due>0

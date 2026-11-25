@@ -18,14 +18,15 @@ function renderProducts() {
             </select>
             <button class="btn btn-primary btn-sm" id="addProdBtn">+ Add Product</button>
             <button class="btn btn-success btn-sm" id="bulkImgBtn" title="Upload images for many products quickly">📷 Bulk Image Manager</button>
-            ${DB.currentUser().role==='admin' ? `<button class="btn btn-warning btn-sm" id="importRateBtn" title="Replace all products with Modern Dry Cleaners official rate list">📋 Import Rate List</button>`:''}
+            ${DB.currentUser().role==='admin' ? `<button class="btn btn-warning btn-sm" id="importRateBtn" title="Replace all products with Modern Dry Cleaners official rate list">📋 Import Rate List</button>
+            <button class="btn btn-secondary btn-sm" id="piecesAutoBtn" title="Pieces per unit naam se dobara detect karein (Suit 3 Pcs = 3) aur purane orders bhi theek karein">🔢 Pcs Auto-Fix</button>`:''}
           </div>
         </div>
         <div style="padding:8px 16px;font-size:12px;color:var(--text-soft);border-bottom:1px solid var(--border);background:var(--surface-alt);">
           💡 Tip: Click any price below to edit it instantly. Press Enter to save.
         </div>
         <table class="tbl">
-          <thead><tr><th></th><th>Name</th><th>Category</th><th style="width:140px;">Price</th><th style="width:140px;">Max (range)</th><th>Status</th><th style="width:160px;">Actions</th></tr></thead>
+          <thead><tr><th></th><th>Name</th><th>Category</th><th style="width:140px;">Price</th><th style="width:140px;">Max (range)</th><th style="width:120px;" title="Ek unit mein kitne pieces (Suit 3 Pcs = 3)">Pcs / Unit</th><th>Status</th><th style="width:160px;">Actions</th></tr></thead>
           <tbody id="prodBody"></tbody>
         </table>
       </div>
@@ -39,6 +40,20 @@ function renderProducts() {
   $('#app').innerHTML = renderLayout('products', content);
   bindLayout();
   $('#addProdBtn').onclick = () => openProductForm();
+  const pcsBtn = $('#piecesAutoBtn');
+  if (pcsBtn) pcsBtn.onclick = () => {
+    confirmDialog('Har product ka "Pcs / Unit" naam se dobara detect hoga (Suit 3 Pcs = 3, Suit 2 Pcs = 2, Shalwar/Kurta = 2) aur purane orders ke pieces bhi dobara calculate honge. Jin products par aap ne KHUD value set ki hai wo nahi badlenge. Continue?', () => {
+      let n = 0;
+      DB.all('products').forEach(p => {
+        if (p.piecesCustom) return;
+        const guess = DB.guessPiecesPerUnit(p.name || '');
+        if (DB.piecesPerUnit(p) !== guess) { DB.update('products', p.id, { piecesPerUnit: guess }); n++; }
+      });
+      const changedOrders = DB.recalcOrderPieces();
+      renderProductsBody();
+      toast(`✅ ${n} products + ${changedOrders} orders ke pieces theek kiye`, 'success');
+    });
+  };
   $('#bulkImgBtn').onclick = () => openBulkImageManager();
   $('#addCatBtn').onclick = () => openCategoryForm();
   $('#prodSearch').oninput = e => { prodFilter.search = e.target.value; renderProductsBody(); };
@@ -84,6 +99,7 @@ function renderProductsBody() {
       <td>${cat.icon} ${escapeHtml(cat.name)}</td>
       <td><input class="rate-edit" data-fld="price" type="number" value="${p.price}" min="0" style="width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-weight:700;color:var(--primary);background:var(--surface);"/></td>
       <td><input class="rate-edit" data-fld="priceMax" type="number" value="${p.priceMax||''}" min="0" placeholder="—" style="width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);"/></td>
+      <td><input class="pieces-edit" data-fld="piecesPerUnit" type="number" value="${DB.piecesPerUnit(p)}" min="1" max="50" step="1" title="Ek unit mein kitne pieces (Suit 3 Pcs = 3)" style="width:70px;padding:6px 8px;border:2px solid ${DB.piecesPerUnit(p) > 1 ? '#0ea5e9' : 'var(--border)'};border-radius:6px;background:var(--surface);font-weight:800;text-align:center;color:${DB.piecesPerUnit(p) > 1 ? '#0ea5e9' : 'inherit'};"/></td>
       <td>${p.active===false ? '<span class="badge cancelled">Hidden</span>' : '<span class="badge paid">Active</span>'}</td>
       <td>
         <button class="btn btn-secondary btn-sm" data-act="edit" data-id="${p.id}">✏️</button>
@@ -92,6 +108,25 @@ function renderProductsBody() {
       </td>
     </tr>`;
   }).join('');
+
+  // Inline edit — Pcs/Unit (client ki requirement: suit 3 pcs = 3 pieces)
+  $$('.pieces-edit').forEach(inp => {
+    const savePieces = () => {
+      const tr = inp.closest('tr');
+      const id = tr.dataset.id;
+      let v = parseInt(inp.value, 10);
+      if (!Number.isFinite(v) || v < 1) v = 1;
+      v = Math.min(50, v);
+      inp.value = v;
+      DB.update('products', id, { piecesPerUnit: v, piecesCustom: true });
+      inp.style.borderColor = v > 1 ? '#0ea5e9' : 'var(--border)';
+      inp.style.color = v > 1 ? '#0ea5e9' : '';
+      inp.style.boxShadow = '0 0 0 3px rgba(34,197,94,.3)';
+      setTimeout(() => inp.style.boxShadow = '', 600);
+    };
+    inp.onblur = savePieces;
+    inp.onkeydown = (e) => { if (e.key === 'Enter') { savePieces(); inp.blur(); toast('Pieces per unit saved', 'success'); } };
+  });
 
   // Inline edit
   $$('.rate-edit').forEach(inp => {
@@ -164,6 +199,19 @@ function openProductForm(existing) {
       <div class="field"><label>Price (Rs.) *</label><input type="number" id="pPrice" value="${p.price}"/></div>
       <div class="field"><label>Max Price (for ranges, optional)</label><input type="number" id="pPriceMax" value="${p.priceMax||''}" placeholder="e.g. 1000 for 800-1000"/></div>
     </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Pieces per unit *</label>
+        <input type="number" id="pPieces" min="1" max="50" step="1" value="${DB.piecesPerUnit(p)}"/>
+        <small style="color:var(--text-soft);">Suit 3 Pcs = <b>3</b> · Suit 2 Pcs / Shalwar Suit / Kurta Shalwar = <b>2</b> · Shirt / Pant / Coat = <b>1</b>. Invoice ka PIECES aur Hanger/Shopper isi se ginte hain.</small>
+      </div>
+      <div class="field">
+        <label>Itne pieces ka matlab</label>
+        <div style="padding:10px 12px;border-radius:8px;background:var(--surface-2,#f1f5f9);font-size:12px;line-height:1.6;">
+          Ek unit bikne par: <b id="pPiecesHint">—</b> hangers + <b>shopper</b> inventory se katenge (packaging Hanger/Mix ho to).
+        </div>
+      </div>
+    </div>
     <div class="form-row cols-1">
       <div class="field">
         <label>Category</label>
@@ -198,17 +246,27 @@ function openProductForm(existing) {
       } catch (err) { toast('Upload failed: ' + err.message, 'error'); }
     };
 
+    const piecesEl = $('#pPieces', m);
+    const hintEl = $('#pPiecesHint', m);
+    const refreshHint = () => { if (hintEl) hintEl.textContent = Math.max(1, Math.min(50, parseInt(piecesEl.value, 10) || 1)) + ' pieces'; };
+    if (piecesEl) { piecesEl.oninput = refreshHint; refreshHint(); }
+
     $('#cancelBtn', m).onclick = closeModal;
     $('#saveBtn', m).onclick = () => {
       const name = $('#pName', m).value.trim();
       const price = +$('#pPrice', m).value;
       if (!name || price < 0) { toast('Enter name & price','error'); return; }
       const maxV = $('#pPriceMax', m).value;
+      let pcsPer = parseInt($('#pPieces', m).value, 10);
+      if (!Number.isFinite(pcsPer) || pcsPer < 1) pcsPer = 1;
+      pcsPer = Math.min(50, pcsPer);
       const data = {
         name, price,
         priceMax: maxV === '' ? null : Math.max(0, +maxV || 0),
         category: $('#pCat', m).value,
         image: $('#pImg', m).value || '🧺',
+        piecesPerUnit: pcsPer,
+        piecesCustom: true,
         active: true
       };
       if (existing) DB.update('products', existing.id, data);

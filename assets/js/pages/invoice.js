@@ -6,7 +6,10 @@ function openInvoice(orderId, autoPrint) {
   const cashier = DB.get('users', o.cashierId) || { name:'-' };
   const s = DB.settings();
   const invoiceNo = DB.invoiceLabel(o);
-  const totalPcs = (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  /* ASLI pieces: qty × pieces-per-unit (Suit 3 Pcs × 2 = 6 pieces) */
+  const totalPcs = (typeof DB.orderPieces === 'function')
+    ? DB.orderPieces(o)
+    : (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
   /* Packaging labels — thermal printer par emoji dabba ban jata hai, is liye TEXT ONLY.
      Client: "Hanger, Fold ya Mix wagera show ho" — bara aur saaf. */
   const delTypeMap = {
@@ -816,7 +819,10 @@ function printChallan(orderId) {
   // Challan keeps its own CH- series; strip any invoice prefix from the number.
   const invDigits = String(o.invoiceNo || '').replace(/\D/g, '');
   const challanNo = invDigits ? `CH-${invDigits.padStart(DB.invoicePad ? DB.invoicePad() : 3, '0')}` : 'CH-' + o.id.slice(-6).toUpperCase();
-  const totalPcs = (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  /* ASLI pieces: qty × pieces-per-unit (Suit 3 Pcs × 2 = 6 pieces) */
+  const totalPcs = (typeof DB.orderPieces === 'function')
+    ? DB.orderPieces(o)
+    : (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
   
   const width = Math.max(280, Math.min(400, +s.invoiceWidth || 300));
   const fontSize = Math.max(12, Math.min(20, (+s.invoiceFontSize || 13)));

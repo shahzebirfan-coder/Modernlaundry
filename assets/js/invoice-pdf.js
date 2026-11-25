@@ -73,7 +73,10 @@
     const c = (DB && DB.get) ? (DB.get('customers', order.customerId) || {}) : {};
     const inv = (DB && DB.invoiceLabel) ? DB.invoiceLabel(order) : (order.invoiceNo || order.id);
     const items = order.items || [];
-    const pcs = items.reduce((a, i) => a + (+i.qty || 0), 0);
+    /* ASLI pieces (Suit 3 Pcs × 2 = 6) */
+    const pcs = (DB && typeof DB.orderPieces === 'function')
+      ? DB.orderPieces(order)
+      : items.reduce((a, i) => a + (+i.qty || 0), 0);
 
     const W = 80, M = 4;
     let y = 8;
@@ -318,7 +321,82 @@
     return 'downloaded';
   }
 
-  window.MDC_PDF = { buildInvoicePdf, downloadInvoicePdf, shareInvoicePdf };
+  /* ============================================================
+     WHATSAPP KE SATH PDF  (client: "invoice PDF bhi jai — professional look")
+     ------------------------------------------------------------------
+     wa.me se file attach nahi hoti (browser ki limitation). Is liye:
+       1. PDF file system me save ho jati hai (downloads) — clean naam ke sath
+       2. Phone par Web Share (file ke sath) → WhatsApp → chat → send  (1 tap)
+       3. PC par: PDF save + WhatsApp chat (message pre-filled) khud khulti hai
+          — user sirf 📎 attach karta hai
+     ============================================================ */
+  function pdfFile(order) {
+    const built = buildInvoicePdf(order);
+    const blob = built.doc.output('blob');
+    let file = null;
+    try { file = new File([blob], built.fileName, { type: 'application/pdf' }); } catch (e) {}
+    return { built, blob, file, fileName: built.fileName };
+  }
+  /* WhatsApp ke liye chhota, professional message (PDF ke sath) */
+  function defaultPdfCaption(order) {
+    try {
+      const s = window.DB.settings();
+      const c = window.DB.get('customers', order.customerId) || {};
+      const inv = window.DB.invoiceLabel(order);
+      const pcs = (window.DB.orderPieces ? window.DB.orderPieces(order) : 0);
+      return `*${s.shopName}*\nHello ${c.name || 'Customer'}, aap ka invoice *${inv}* tayyar hai.\n\n` +
+             `Pieces: ${pcs}\nAmount: ${money(order.total)}\nDelivery: ${dmy(order.deliveryDate)}\n\n` +
+             `Invoice PDF attach hai. Shukriya! 🧺\n📞 ${s.phone || ''}`;
+    } catch (e) {
+      return 'Invoice ' + (order.invoiceNo || '') + ' — ' + ((window.DB && window.DB.settings().shopName) || '');
+    }
+  }
+
+  function waUrlFor(phone, text) {
+    let p = String(phone || '').replace(/[^\d+]/g, '');
+    if (p.startsWith('+')) p = p.substring(1);
+    if (p.startsWith('0') && p.length === 11) p = '92' + p.substring(1);
+    return 'https://wa.me/' + p + (text ? '?text=' + encodeURIComponent(text) : '');
+  }
+  /* File save karo (download) — kuch browsers me "Save as" khud aata hai */
+  function savePdf(order) {
+    const { built } = pdfFile(order);
+    built.doc.save(built.fileName);
+    return built.fileName;
+  }
+  /* Ek click ka mahazra: PDF + WhatsApp */
+  async function sendInvoicePdfOnWhatsApp(order, messageText) {
+    const c = (window.DB.get('customers', order.customerId) || {});
+    if (!c.phone) { (window.toast || console.warn)('Customer ka phone number nahi hai', 'error'); return 'no-phone'; }
+    const text = messageText || defaultPdfCaption(order);
+
+    let built;
+    try { built = pdfFile(order); }
+    catch (e) { (window.toast || console.warn)(e.message || 'PDF ban nahi saka', 'error'); return 'error'; }
+
+    /* Phone / tablet: file ke sath seedha share sheet (WhatsApp chunein → send) */
+    if (built.file && navigator.canShare && navigator.canShare({ files: [built.file] })) {
+      try {
+        await navigator.share({
+          files: [built.file],
+          title: built.fileName,
+          text: text
+        });
+        return 'shared';
+      } catch (e) {
+        if (e && e.name === 'AbortError') return 'cancelled';
+      }
+    }
+    /* PC: PDF save + WhatsApp chat kholein (message ready).
+       Browser file ko wa.me me attach nahi kar sakta — is liye PDF download +
+       WhatsApp chat dono khulte hain; user sirf 📎 dabata hai. */
+    try { built.built.doc.save(built.fileName); } catch (e) {}
+    try { window.open(waUrlFor(c.phone, text), '_blank'); } catch (e) { window.location.href = waUrlFor(c.phone, text); }
+    return 'downloaded';
+  }
+
+  window.MDC_PDF = { buildInvoicePdf, buildInvoiceFile: pdfFile, downloadInvoicePdf, savePdf,
+                     shareInvoicePdf, sendInvoicePdfOnWhatsApp, waUrlFor, defaultPdfCaption };
 
   /* Small UI helper used by the invoice screen / WhatsApp picker */
   window.openInvoicePdfMenu = function (orderId) {

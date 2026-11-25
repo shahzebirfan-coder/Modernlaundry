@@ -6,7 +6,11 @@
 
 /* Calculate how much of each supply an order uses */
 function calculateSupplyUsage(order) {
-  const totalPcs = (order.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  /* ASLI pieces — "Suit 3 Pcs" ek unit = 3 pieces, is liye 3 hanger + 3 shopper.
+     (Purana bug: sirf cart qty ginti thi, suit ke pieces nahi.) */
+  const totalPcs = (typeof DB !== 'undefined' && typeof DB.orderPieces === 'function')
+    ? DB.orderPieces(order)
+    : (order.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
   const delType = (order.deliveryType || 'hanger').toLowerCase();
   const usesHangers = delType === 'hanger' || delType === 'both';
 

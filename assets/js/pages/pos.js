@@ -127,8 +127,12 @@ function addToCart(productId) {
   const p = DB.get('products', productId);
   if (!p) return;
   const existing = posState.cart.find(i => i.productId === productId);
+  /* `pieces` = is product ki ek unit mein kitne pieces (Suit 3 Pcs = 3).
+     Invoice ka PIECES aur Hanger/Shopper isi se ginte hain — cart me snapshot
+     rakhte hain taake baad me product badalne se purana order na badle. */
+  const pcsPer = (typeof DB.piecesPerUnit === 'function') ? DB.piecesPerUnit(p) : 1;
   if (existing) existing.qty += 1;
-  else posState.cart.push({ productId: p.id, name: p.name, image: p.image, price: p.price, originalPrice: p.price, qty: 1 });
+  else posState.cart.push({ productId: p.id, name: p.name, image: p.image, price: p.price, originalPrice: p.price, qty: 1, pieces: pcsPer });
   renderCart();
 }
 
@@ -207,7 +211,7 @@ function renderCart() {
     <div class="cart-item">
       <div class="ci-img">${productImageHTML(it.image, 40)}</div>
       <div class="ci-info">
-        <div class="ci-name">${escapeHtml(it.name)}${priceChanged?` <span title="Price edited (was ${fmtMoney(origPrice)})" style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:6px;">✏️ edited</span>`:''}</div>
+        <div class="ci-name">${escapeHtml(it.name)}${priceChanged?` <span title="Price edited (was ${fmtMoney(origPrice)})" style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:6px;">✏️ edited</span>`:''}${(Math.max(1, parseInt(it.pieces || 1, 10)) > 1) ? ` <span title="Ek unit mein itne pieces — invoice par PIECES isi se barhta hai" style="font-size:10px;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:6px;font-weight:800;">${Math.max(1, parseInt(it.pieces, 10))} pcs/unit</span>` : ''}${(Math.max(1, parseInt(it.pieces || 1, 10)) > 1) ? `<span style="font-size:11px;color:#0369a1;font-weight:700;margin-left:4px;">= ${Math.max(1, parseInt(it.pieces,10)) * Math.max(1, parseInt(it.qty,10))} pieces</span>` : ''}</div>
         <div class="ci-price" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
           <span style="font-size:11px;color:var(--text-soft);">${cur}</span>
           <input type="number" class="ci-price-input" data-i="${i}" value="${it.price}" min="0" step="1" title="Click to change price" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-weight:700;color:var(--primary);background:var(--surface);text-align:right;"/>

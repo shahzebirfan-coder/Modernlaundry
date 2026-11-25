@@ -64,7 +64,9 @@ function openWhatsAppStatusDialog(orderId, status) {
   const isPress = status === 'ironing';
 
   const invoiceNo = DB.invoiceLabel(o);
-  const totalPcs = (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  const totalPcs = (typeof DB !== 'undefined' && typeof DB.orderPieces === 'function')
+    ? DB.orderPieces(o)
+    : (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
 
   const vars = {
     '{name}':     c.name || 'Customer',
@@ -104,38 +106,96 @@ function openWhatsAppStatusDialog(orderId, status) {
       💡 Clicking <b>Send</b> opens WhatsApp Web/App with this message pre-filled — you just press the send arrow.
     </div>
 
+    <!-- PDF ke sath bhejne ka option (client requirement: professional colour copy) -->
+    <div style="border:2px solid #25D366;border-radius:10px;padding:12px;margin-bottom:12px;background:#f0fdf4;">
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+        <input type="checkbox" id="waAttachPdf" ${(DB.settings().whatsappAttachPdf !== false) ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px;accent-color:#25D366;"/>
+        <span style="font-size:13px;line-height:1.5;">
+          <b>📄 Invoice PDF bhi bhejein</b> <span style="background:#25D366;color:#fff;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:800;">RECOMMENDED</span><br>
+          <span style="color:var(--text-soft);font-size:12px;">Customer ko proper colour invoice milega (logo, invoice no., pieces, terms) — professional impression.</span>
+        </span>
+      </label>
+      <div style="font-size:11px;color:#166534;margin-top:8px;line-height:1.5;" id="waPdfHint">
+        📱 <b>Phone:</b> PDF + message dono share honge — WhatsApp chunein, chat chunein, send.<br>
+        💻 <b>PC:</b> PDF save hogi aur WhatsApp chat khulegi — sirf 📎 attach karna hai.
+      </div>
+    </div>
+
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px;">
       <input type="checkbox" id="waDontAsk"/> Don't ask again for status changes today
     </label>
 
-    <div class="modal-footer">
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px;">
       <button class="btn btn-ghost" onclick="closeModal()">Skip</button>
       <button class="btn btn-secondary" id="copyWaBtn">📋 Copy</button>
-      <button class="btn btn-success btn-lg" id="sendWaBtn" style="padding:14px 24px;font-size:15px;">📱 Send WhatsApp Now</button>
+      <button class="btn btn-secondary" id="sendWaBtn">📱 Message Only</button>
+      <button class="btn btn-success btn-lg" id="sendWaPdfBtn" style="padding:14px 24px;font-size:15px;">📄📱 Send WhatsApp + PDF</button>
     </div>
   `, { large: true, onOpen(m) {
+    /* Owner ki pasand yaad rakhein — agli dafa wohi default rahe */
+    const attachEl = $('#waAttachPdf', m);
+    if (attachEl) attachEl.onchange = () => {
+      try { DB.saveSettings({ whatsappAttachPdf: !!attachEl.checked }); } catch (e) {}
+    };
+
+    if (attachEl) {
+      const pdfB = $('#sendWaPdfBtn', m);
+      const syncBtn = () => { if (pdfB) pdfB.innerHTML = attachEl.checked ? '📄📱 Send WhatsApp + PDF' : '📱 Send WhatsApp Now'; };
+      attachEl.addEventListener('change', syncBtn); syncBtn();
+      attachEl.addEventListener('change', () => {
+        if ($('#sendWaBtn', m)) $('#sendWaBtn', m).style.display = attachEl.checked ? '' : 'none';
+      });
+      if (attachEl.checked && $('#sendWaBtn', m)) $('#sendWaBtn', m).style.display = '';
+    }
+
     $('#copyWaBtn', m).onclick = () => {
       navigator.clipboard.writeText($('#waStatusMsg', m).value)
         .then(() => toast('Copied to clipboard','success'));
     };
+    const markSent = (channel) => {
+      if (typeof logAction === 'function') {
+        logAction('whatsapp.sent', `Status "${status}" → ${c.name} (${DB.invoiceLabel(o)}) [${channel}]`);
+      }
+      const sent = o.whatsappLog || [];
+      sent.push({ status, sentAt: new Date().toISOString(), by: DB.currentUser()?.username, channel });
+      DB.update('orders', orderId, { whatsappLog: sent });
+      if ($('#waDontAsk', m) && $('#waDontAsk', m).checked) {
+        sessionStorage.setItem('mrLaundryWaPause', isoDay());
+      }
+    };
+
     $('#sendWaBtn', m).onclick = () => {
       const text = $('#waStatusMsg', m).value;
       const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
       window.open(url, '_blank');
-      // Log
-      if (typeof logAction === 'function') {
-        logAction('whatsapp.sent', `Status "${status}" → ${c.name} (${DB.invoiceLabel(o)})`);
-      }
-      // Mark on order
-      const sent = o.whatsappLog || [];
-      sent.push({ status, sentAt: new Date().toISOString(), by: DB.currentUser()?.username });
-      DB.update('orders', orderId, { whatsappLog: sent });
-      // Save "don't ask"
-      if ($('#waDontAsk', m).checked) {
-        sessionStorage.setItem('mrLaundryWaPause', isoDay());
-      }
+      markSent('whatsapp-text');
       toast('Opening WhatsApp...', 'success');
       closeModal();
+    };
+
+    /* PDF ke sath — client ki requirement (professional colour copy) */
+    const pdfBtn = $('#sendWaPdfBtn', m);
+    if (pdfBtn) pdfBtn.onclick = async () => {
+      const text = $('#waStatusMsg', m).value;
+      if (!(window.MDC_PDF && window.MDC_PDF.sendInvoicePdfOnWhatsApp)) {
+        toast('PDF engine load nahi hua — page refresh karein', 'error');
+        return;
+      }
+      const label = pdfBtn.innerHTML;
+      pdfBtn.disabled = true;
+      pdfBtn.innerHTML = '⏳ PDF ban rahi hai…';
+      let res = 'error';
+      try {
+        res = await window.MDC_PDF.sendInvoicePdfOnWhatsApp(o, text);
+      } catch (e) {
+        toast('PDF bhejne me masla: ' + (e.message || e), 'error');
+      }
+      pdfBtn.disabled = false;
+      pdfBtn.innerHTML = label;
+      if (res === 'cancelled') return;
+      if (res === 'shared') { markSent('whatsapp-pdf'); toast('✅ PDF + message share ho gaye', 'success'); closeModal(); }
+      else if (res === 'downloaded') { markSent('whatsapp-pdf'); toast('PDF save ho gayi — WhatsApp me 📎 attach karein', 'success', 8000); closeModal(); }
+      else if (res === 'no-phone') { toast('Customer ka phone number nahi hai', 'error'); }
     };
   }});
 }
@@ -210,7 +270,9 @@ function openWhatsAppPicker(orderId) {
   const c = DB.get('customers', o.customerId) || {};
   if (!c.phone) { toast('Customer has no phone number','warning'); return; }
   const invoiceNo = DB.invoiceLabel(o);
-  const totalPcs = (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
+  const totalPcs = (typeof DB !== 'undefined' && typeof DB.orderPieces === 'function')
+    ? DB.orderPieces(o)
+    : (o.items || []).reduce((sum, it) => sum + (it.qty || 0), 0);
 
   // Build sent history
   const history = o.whatsappLog || [];
@@ -235,7 +297,8 @@ function openWhatsAppPicker(orderId) {
       `).join('')}
     </div>
 
-    <button class="btn btn-warning btn-block" id="customBtn" style="margin-top:10px;">✏️ Write Custom Message</button>
+    <button class="btn btn-success btn-block" id="waPdfQuick" style="margin-top:10px;padding:14px;font-size:14px;">📄 Invoice PDF WhatsApp par bhejein</button>
+    <button class="btn btn-warning btn-block" id="customBtn" style="margin-top:8px;">✏️ Write Custom Message</button>
 
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -246,6 +309,21 @@ function openWhatsAppPicker(orderId) {
       closeModal();
       openWhatsAppStatusDialog(orderId, status);
     });
+    const quickPdf = $('#waPdfQuick', m);
+    if (quickPdf) quickPdf.onclick = async () => {
+      if (!(window.MDC_PDF && window.MDC_PDF.sendInvoicePdfOnWhatsApp)) { toast('PDF engine load nahi hua', 'error'); return; }
+      quickPdf.disabled = true; quickPdf.textContent = '⏳ PDF ban rahi hai…';
+      const s = DB.settings();
+      const txt = `Hello ${c.name || 'Customer'}, yeh aap ka invoice ${invoiceNo} hai — ${s.shopName}.
+
+Aap ka invoice PDF attach hai. Shukriya!`;
+      const res = await window.MDC_PDF.sendInvoicePdfOnWhatsApp(o, txt);
+      quickPdf.disabled = false; quickPdf.textContent = '📄 Invoice PDF WhatsApp par bhejein';
+      if (res === 'shared') { toast('✅ PDF share ho gayi', 'success'); closeModal(); }
+      else if (res === 'downloaded') { toast('PDF save ho gayi — WhatsApp me 📎 attach karein', 'success', 8000); closeModal(); }
+      else if (res === 'no-phone') toast('Phone number nahi hai', 'error');
+    };
+
     $('#customBtn', m).onclick = () => {
       // Use generic invoice WhatsApp
       closeModal();
