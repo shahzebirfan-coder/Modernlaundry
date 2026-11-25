@@ -1264,3 +1264,57 @@ Version: `?v=20261123.2`, sw `modern-dry-cleaners-pos-v54`.
 `tsynclive.js` — **asli Firebase RTDB** ke sath end-to-end: naya khaali device pull karta hai (cloud nahi chhera),
 purana device order push karta hai, naya device khud le aata hai, khaali push cloud data nahi udata (baseline restore).
 Version: `?v=20261124.0`, sw `modern-dry-cleaners-pos-v55`, build tag `cloud v20 (auto-sync, wipe-safe)`.
+
+---
+
+## 17. PIECES PER UNIT (v20261124.1 / sw v56) — "Suit 3 Pcs = 3 pieces"
+**Client:** *"Invoice p pieces galat dikhte hain — 3PC Suit / 2Pc Suit / Kurta Shalwar bhi quantity ki tarah hain.
+Products page mein column add karein jahan product ki quantity ho, phir invoice aur Hanger/Shopper inventory sahi gine."*
+
+### Asli bug
+`pieces` sirf cart quantity thi. 1 × "Suit 3 Pcs" → **1 piece** (hona chahiye 3), is liye invoice, Hanger/Shopper
+deduction, orders list, ledger — sab kam ginte the.
+
+### Fix
+- `DB.piecesPerUnit(product)` — product ka `piecesPerUnit` (1–50). Na ho to `DB.guessPiecesPerUnit(name)`
+  (naam se: "Suit 3 Pcs"/"3PC"/"Bridal" → 3, "Suit 2 Pcs"/"Shalwar"/"Kurta"/"Skirt Suit" → 2, baqi 1).
+- `DB.orderPieces(order)` = Σ (qty × pieces-per-unit); line par `pieces` snapshot.
+- **Products page:** naya column **"Pcs / Unit"** (inline editable, >1 par blue). Add/Edit form mein bhi field +
+  live hint. Admin button **🔢 Pcs Auto-Fix** — sab products naam se detect + purane orders recalc.
+- **Migration (idempotent):** load par jis product par `piecesPerUnit` nahi, us par guess bhar diya jata;
+  `piecesCustom: true` wali owner value kabhi nahi badalti. `insert('products')` par bhi auto-guess.
+- **Purane orders:** `DB.recalcOrderPieces()` — ek dafa (flag `_piecesRecalcV = 2`) har order par pieces snapshot +
+  total; sirf pieces field bharti hai, amounts/number ko chhoota nahi. Idempotent.
+- **Counting har jagah:** `invoice.js` (customer + office copy), `invoice-pdf.js`, `inventory-auto.js`
+  (hanger = pieces for hanger/mixed, shopper = pieces always), `orders.js`, `ledger.js`, `whatsapp.js`.
+- **POS cart:** line par `3 pcs/unit = 6 pieces` badge (cashier ko foran pata chale).
+- Invoice par item ke aage `(3 pcs)` **nahi** dikhaya (client ki choice) — sirf bara PIECES box.
+
+### Tests
+`tpieces.js` (26 ✓) — naam detection 14 case, order pieces, hanger/shopper usage (Hanger 9 + Shopper 9 / Fold 0 + 9),
+purane orders recalc + idempotent, owner value safe. Baqi sab suites green.
+Version: `?v=20261124.1`, sw `modern-dry-cleaners-pos-v56`.
+
+---
+
+## 18. WhatsApp ke sath Invoice PDF (v20261124.2 / sw v57)
+**Client:** *"Jab customer ko WhatsApp karte hain invoice details to wahaan par invoice PDF bhi jaye — customer ke paas proper colour
+copy jaye, professional look aaye."*
+
+### Kya bana
+- **Status dialog me naya option:** `📄 Invoice PDF bhi bhejein` (default **checked**, `settings.whatsappAttachPdf` me yaad rehta hai)
+  aur do buttons: **`📱 Message Only`** (purana raasta) aur **`📄📱 Send WhatsApp + PDF`** (naya).
+- **`MDC_PDF.sendInvoicePdfOnWhatsApp(order, text)`**
+  - Phone/tablet: `navigator.share({files:[pdf]})` → WhatsApp → chat → send (ek tap).
+  - PC: PDF save + WhatsApp chat (professional caption pre-filled) — user sirf 📎 attach karta hai.
+  - wa.me link se file attach nahi ho sakti (browser limitation) — is liye yeh hybrid raasta, UI me saaf hidayat.
+- **Professional caption** (`defaultPdfCaption`): `*Shop*` + customer naam + invoice no. (bold) + Pieces + Amount + Delivery + phone.
+- **WhatsApp picker** me bhi seedha button: `📄 Invoice PDF WhatsApp par bhejein`.
+- WhatsApp log me `channel: 'whatsapp-pdf'` darj hota hai (audit).
+- PDF jaisi customer ko jati hai: **koi CUT HERE nahi**, page 1 poori invoice (logo, bara INV no., PIECES, terms, CelineSoft credit),
+  page 2 office copy. (Pehle hi 15S me set hai.)
+
+### Tests
+`twapdf.js` (20 ✓) — dialog option, preference, PDF build (156 KB valid), caption (pieces 3+1=4), wa.me format.
+Baqi sab suites green (13 suites + recovery).
+Version: `?v=20261124.2`, sw `modern-dry-cleaners-pos-v57`.

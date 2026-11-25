@@ -1,0 +1,32 @@
+MODERN DRY CLEANERS — GITHUB PAR UPLOAD KARNE KA TAREEQA
+Zip: "Modern Dry Cleaners - POS.zip"  (112 files, 3.8 MB — saaf, koi .git/credentials nahi)
+Version: ?v=20261124.2  |  Service worker: modern-dry-cleaners-pos-v57
+
+1) GITHUB REPO
+   GitHub par naya repo banayein (public ya private) — misal: modern-dry-cleaners-pos
+
+2) FILES
+   Zip extract karein, phir:
+     GitHub repo → Add file → Upload files → poora content drag → Commit changes
+   (ya Git se: git init → git add . → git commit -m "POS v20261124.2" → git push)
+
+3) LIVE WEBSITE (GitHub Pages)
+   Settings → Pages → Deploy from a branch → main → / (root) → Save
+   2-3 minute baad: https://<USER>.github.io/<REPO>/
+
+4) ZAROORI (3 baatein)
+   a) Passwords GitHub par NAHI jayen — maine zip se nikal diya hai:
+      HANDOVER-CREDENTIALS.md, FIREBASE-CONFIG.txt, IT-OWNER-LOGIN.txt
+      (aur .gitignore bhi bana diya hai taake aage bhi na jayein)
+   b) Website khulte hi purana cache aa sakta hai → Ctrl+Shift+R (ek dafa)
+   c) Naya computer par data na aaye to: Settings → Cloud Sync → ⬆️ Force Push
+      (sirf usi PC par dabayein jahan asli data mojood hai)
+
+5) ZIP MEIN KYA HAI
+   App: index.html, portal.html, live.html, reviews.html, sw.js, manifest.json, assets/ (js/css/img)
+   Docs: BRAND-README.md (poora change log), GITHUB-UPLOAD.md, aur har update ki *.txt summary
+   Nahi hai: .git/, credentials files, node_modules, OS junk
+
+6) AAGE UPDATE KAISE
+   Naya zip → GitHub → Upload files → same naam replace → Commit
+   (?v= number badal jata hai is liye client ka browser khud naya code le leta hai)

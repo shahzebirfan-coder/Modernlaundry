@@ -1,0 +1,36 @@
+MODERN DRY CLEANERS — WHATSAPP KE SATH INVOICE PDF
+Version ?v=20261124.2   |   Service worker: modern-dry-cleaners-pos-v57
+
+Aap ki requirement: "jab customer ko WhatsApp karein to invoice PDF bhi jaye —
+customer ke paas proper colour copy jaye, professional look aaye."
+
+AB WHATSAPP POPUP MEIN:
+  [✔] 📄 Invoice PDF bhi bhejein          (RECOMMENDED) — default ON
+        Phone: PDF + message dono share honge → WhatsApp chunein → chat → send
+        PC:    PDF save hogi + WhatsApp chat khulegi → sirf 📎 attach karna hai
+  [ ] Don't ask again for status changes today
+
+  Buttons:
+    Skip        |  📋 Copy  |  📱 Message Only  |  📄📱 Send WhatsApp + PDF
+
+SATH HI:
+- WhatsApp picker (📱 button) mein bhi seedha option: "📄 Invoice PDF WhatsApp par bhejein"
+- PDF ke sath professional message khud banta hai:
+      *Modern Dry Cleaners*
+      Hello Mansoor, aap ka invoice *INV-3046* tayyar hai.
+      Pieces: 4
+      Amount: Rs. 1600
+      Delivery: 29 Nov 2026
+      Invoice PDF attach hai. Shukriya! 🧺
+- PDF mein: logo, BARA invoice number, PIECES (asli count), items, total, shop timings,
+  Terms & Conditions, CelineSoft credit — CUT HERE nahi (customer ke liye saaf copy).
+- Aap ka "PDF bhejein" ka intekhab yaad rehta hai — agli dafa wohi default.
+
+AHEM (technical, magar zaroori):
+WhatsApp ki security wajah se browser se seedha file attach nahi ho sakti.
+Is liye:
+  • Phone/tablet par: ek tap mein PDF + message dono chale jate hain. ✅
+  • PC par: PDF download hoti hai aur WhatsApp chat khul jati hai — sirf 📎 (attach)
+    dabana hota hai. Ye WhatsApp ki limitation hai, software ki nahi.
+
+Update: naya zip extract → Ctrl+Shift+R (ek dafa).

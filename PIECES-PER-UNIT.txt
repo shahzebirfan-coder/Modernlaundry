@@ -1,0 +1,29 @@
+MODERN DRY CLEANERS — PIECES PER UNIT (Suit 3 Pcs = 3 pieces)
+Version ?v=20261124.1   |   Service worker: modern-dry-cleaners-pos-v56
+
+MASLA (jo aap ne bataya — bilkul sahi tha):
+Pehle "pieces" sirf cart ki quantity ginti thi. 1 × Suit 3 Pcs ka matlab 1 piece dikhta tha,
+asli 3 pieces hone chahiye the. Isi wajah se:
+  - Invoice par ghalat PIECES
+  - Hanger / Shopper inventory kam kat rahi thi
+  - Orders list / Ledger / WhatsApp par bhi kam pieces
+
+AB KYA HUA:
+1) Products page mein naya column: "Pcs / Unit"
+   - Suit 3 Pcs = 3 · Suit 2 Pcs = 2 · Shalwar Suit / Kurta Shalwar = 2 · Shirt / Pant / Coat = 1
+   - Column mein seedha number likh kar Enter dabayein — wohi save ho jata hai.
+   - Add / Edit product form mein bhi ye field hai (live hint ke sath).
+2) Purane 108 items khud bhar gaye — naam se detect ho kar (aap ko ek ek type nahi karna).
+   Jo product aap khud set karenge, wo kabhi khud-ba-khud nahi badlega.
+   Agar kabhi dobara detect karwana ho: Products page → "🔢 Pcs Auto-Fix" button.
+3) Invoice ab ASLI pieces ginti hai:
+   2 × Suit 3 Pcs + 1 × Shalwar Suit + 1 × Coat → PIECES = 9  (pehle 4 dikhta tha)
+   PDF par bhi wahi. Office copy par bhi wahi.
+4) Inventory (Hanger / Shopper) ab sahi:
+   Hanger = 9, Shopper = 9 (Fold/Mix ho to Hanger 0, Shopper 9)
+5) Purane orders bhi ek dafa dobara calculate ho gaye (pieces theek), amounts bilkul waise hi.
+6) POS cart mein cashier ko foran dikhta hai: "3 pcs/unit = 6 pieces".
+
+Note: Invoice par item ke aage "(3 pcs)" nahi likha (aap ki choice) — sirf ooper bara PIECES box.
+
+Update: naya zip extract → Ctrl+Shift+R (ek dafa). Koi setting save karne ki zaroorat nahi.
