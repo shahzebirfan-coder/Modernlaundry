@@ -1318,3 +1318,83 @@ copy jaye, professional look aaye."*
 `twapdf.js` (20 ✓) — dialog option, preference, PDF build (156 KB valid), caption (pieces 3+1=4), wa.me format.
 Baqi sab suites green (13 suites + recovery).
 Version: `?v=20261124.2`, sw `modern-dry-cleaners-pos-v57`.
+
+---
+
+## 19. PRINT CHHOTA AA RAHA THA (v20261124.3 / sw v58) — fix
+**Client (screenshot):** *"Print out bohat chhota aa raha hai, adjust nahi. Scale 100% hai phir bhi bohat ziyada chhota print out."*
+Screenshot me `3 sheets of paper` bhi dikh raha tha.
+
+### Asli wajah (naap kar sabit)
+1. **Print iframe ki width `0px` thi** (`width:0;height:0`). Is liye auto-fit jab slip ki height naapta tha to browser
+   **har line ko 0 chaurai me toot** deta tha → height **684mm** naapi gayi (asli 239mm).
+   Auto-fit ne `292/684 ≈ 35%` scale laga diya → print bohat chhota. **Yeh bunyadi bug tha.**
+2. `@page { size: 72mm auto }` — Chrome `auto` height par `3 sheets of paper` bana deta tha.
+3. Auto-fit ka minimum 42% tha (parhna mushkil).
+
+### Fix
+- Print iframe ko **asli paper chaurai** (`72mm`) + `297mm` height, `left:-10000px` par (user ko nahi dikhta).
+  Ab naap sahi hoti hai → **scale = 100%**, slip 239mm me fit.
+- `@page size: {paper}mm {pageH}mm` — fixed height: ek copy **297mm**, customer+office **594mm** (exactly 2 page, teesra nahi).
+- Auto-fit minimum **78%**; slip pehle se fit ho to **bilkul** chhoti nahi hoti.
+- `resetSlipScale()` — print ke 1.2s/4s baad transform hata diya jata hai taake preview 100% size dikhaye.
+- **Naya control:** Settings → Thermal Print Setup → **"Print ka size"**:
+  `Normal (auto-fit, 1 page)` / **`Bara (100% — bilkul chhota nahi)`** (`settings.printSizeMode`).
+- Screen par bhi slip ka sahi print size (font 11px, big no. 26px) — ghalat-fehmi khatam.
+
+### Proof (naap)
+```
+Sahi chaurai (72mm) : slip = 239 mm
+0-width iframe (purana) : 684 mm  → 2.9× lamba → auto-fit 35%
+Ab: 239mm ≤ 292mm → scale 100% ✅
+```
+### Tests
+`tprintsize.js` (naya, 16 ✓) + updated `tprintiframe`/`tprintfix`/`tfitoffice`. Sab 15 suites green.
+Version: `?v=20261124.3`, sw `modern-dry-cleaners-pos-v58`.
+
+---
+
+## 20. Print repeat (33 pages) + size fix — `?v=20261124.4` / sw `v59`
+
+### Client ka masla
+Print par **wohi invoice 30+ dafa** aa rahi thi (33 pages) aur size **chhoti** aa rahi thi.
+
+### Asli wajah (PDF se pakri gayi)
+Client ne jo PDF bheji: **33 pages, har page 612×792 pt (Letter)** — page 2 customer copy,
+pages 3–33 wohi copy repeat. Teen wajah thin:
+1. Slip `page-break-after: always` + andar ke elements `position: absolute` → Chrome ek hi
+   block ko baar baar repeat karta hai.
+2. Slip ki height content se kam/zyada → page se bahar overflow → repeat.
+3. **`html` ki width 80mm thi magar paper 72mm** → Chrome 8mm overflow ko shrink kar ke
+   poora print chhota kar deta tha **aur right side cut hoti thi**.
+
+### Fix (final)
+- `.print-slip`: **fixed height nahi** — `height:auto`, `overflow:visible`, content ke
+  mutabiq. Har copy ke baad `break-after: page` → **exactly 2 pages** (customer + office),
+  33 nahi. `#printArea *` par `position: static` — repeat ki jarh khatam.
+- `html` aur `body` **dono ki width = asli paper** (`invoiceRawPaperMm`, default 72mm).
+  → koi horizontal shrink nahi, koi cut nahi.
+- **Koi transform/scale nahi** (100% print). Pehle `transform: scale()` aur baad me
+  `resetSlipScale()` print ke douran scale hata deta tha — dono hata diye.
+- Print hamesha 100% se shuru: agar ek roll page (297mm) me fit hai to **bilkul waisa hi**.
+  Bhaari invoice ke liye **3 compact darje** (cmp1 → cmp2 → cmp3: padding, line-height,
+  logo, terms size) — text jitna bara mumkin ho. Sirf uske baad **font step-down**
+  100% → 70% (3% qadam). 70% se neeche kabhi nahi.
+- `pageH`/`copiesCount` (594mm do-copy page) ka purana hisaab **hata diya** — print dialog
+  me ab sirf 72mm × 297mm.
+
+### Proof (asli print doc, WeasyPrint + real 72mm roll)
+```
+items │ page │ height (289mm = 1 page)
+   4  │  1   │ 256 mm   (level 2, font 100%)
+   6  │  1   │ 276 mm   (level 2, font 100%)
+   8  │  1   │ 280 mm   (level 3, font 100%)
+  10  │  1   │ 286 mm   (level 3, font 94%)
+  12  │  1   │ 290 mm   (level 3, font 88%)
+  15  │  1   │ 291 mm   (level 3, font 79%)
+customer + office  →  exactly 2 pages (33 nahi)
+```
+### Tests
+Naya `tprintpages.js` (16 ✓) + updated `tprintsize`/`tprintfix`/`tfitoffice`/`tprintiframe`.
+Sab **16 suites + test_recovery** green.
+Version: `?v=20261124.4`, sw `modern-dry-cleaners-pos-v59`.

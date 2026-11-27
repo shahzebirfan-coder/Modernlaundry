@@ -1,0 +1,73 @@
+========================================================================
+   MODERN DRY CLEANERS  —  PRINT FIX
+   "Bhoar sari invoice ek saath" + size ka masla — HAL HO GAYA
+   Version: ?v=20261124.4      Service worker: pos-v59
+========================================================================
+
+AAP KA MASLA
+------------
+1. Print par wohi invoice 30+ dafa aa rahi thi (33 pages).
+2. Invoice ka size chhota aa raha tha / right side cut ho rahi thi.
+3. Aap ki bheji hui PDF: 33 pages, har page "Letter" size (612 x 792 pt).
+
+KYA WAJAH THI (PDF khol kar dekhi)
+----------------------------------
+* Purani settings har copy ke baad zabardasti naya page banati thin AUR andar ke
+  elements "absolute position" par thay — isi se Chrome ek hi copy ko baar baar
+  chhap deta hai (33 pages).
+* Aap ki PDF ka paper "Letter" tha, roll (72mm) nahi — isi liye print chhota aata tha.
+* Sab se bari wajah: page ki chaurai 80mm set thi magar paper 72mm — Chrome 8mm
+  zyada hissa chhota kar ke POORA print shrink kar deta tha, aur right side kat jati thi.
+
+AB KYA HO GA (fix)
+------------------
+* Print me HAMESHA sirf 2 pages:  page 1 = CUSTOMER COPY,  page 2 = OFFICE COPY.
+  (33 pages, repeat copies — bilkul khatam.)
+* Har copy ek hi roll page (297mm) par poori aa jati hai.
+* Print ka size 100% — koi chhotapan nahi, koi cut nahi (left/right dono taraf margin barabar).
+* Agar invoice bohat bhaari ho (12-15 items) to pehle fuzool khali jagah khatam hoti hai
+  (spacing, logo, terms ka size) — text jitna bara mumkin ho. Sirf uske baad font
+  halka sa chhota hota hai (100% se 70% tak, us se neeche kabhi nahi).
+* Print dialog me paper sirf "72mm x 297mm" dikhega (pehle 594mm jaisa ajeeb size aata tha).
+* Logo, invoice number (bara), PIECES (bara), PACKAGING, 9 Terms & Conditions,
+  Shop Timings aur "Designed & Developed by: Celinesoft" — sab page 1 par.
+
+NAAP (proof)
+------------
+   items   pages   height
+     4       1     256 mm   (100% size)
+     6       1     276 mm   (100% size)
+     8       1     280 mm   (100% size)
+    10       1     286 mm   (94% size)
+    12       1     290 mm   (88% size)
+    15       1     291 mm   (79% size)
+  customer + office  ->  theek 2 pages
+
+PRINT KARNE KA TAREEQA (yeh na badlein)
+---------------------------------------
+1. Invoice kholein  ->  Print button dabayein.
+2. Print dialog me:
+      Paper size   : aap ka thermal roll (72mm / 80mm — jo setting me hai)
+      Margins      : Default / None
+      Scale        : 100%   (Fit to page / Shrink NAHI)
+      Headers & footers : OFF
+3. Print.
+
+SETTINGS (agar size adjust karna ho)
+-----------------------------------
+Settings  ->  Thermal Print Setup
+   * Paper width (mm)   : 72  (80mm roll ke liye)
+   * Print ka size      : Normal (auto-fit)  ya  Bara (100% — bilkul chhota nahi)
+     - Normal rakhein to upar wala sab khud ho jata hai.
+     - Bara rakhein to invoice kabhi chhoti nahi hoti (bohat lambi ho to page 2 chala jata hai).
+
+AGAR PHIR BHI MASLA HO
+----------------------
+1. Browser me Ctrl + Shift + R  (hard refresh) — service worker naya aana chahiye.
+2. Settings me ek dafa "Print ka size = Normal" save karein.
+3. Print dialog check karein: Scale 100% ho, Fit-to-page band ho.
+4. Phir bhi ajeeb ho to print PDF bana kar bhej dein — hum pages gin kar bata denge.
+
+------------------------------------------------------------------------
+Designed & Developed by: Celinesoft      Contact: 0302-8244803
+========================================================================

@@ -1,0 +1,30 @@
+MODERN DRY CLEANERS — PRINT CHHOTA AA RAHA THA (FIX)
+Version ?v=20261124.3   |   Service worker: modern-dry-cleaners-pos-v58
+
+MASLA:
+Print preview me invoice bohat chhota aa raha tha, Scale 100% hone ke bawajood.
+Sath hi print dialog "3 sheets of paper" dikha raha tha.
+
+ASLI WAJAH (maine naap kar dekha — andaza nahi):
+  • Print karne wali chhupi hui window ki CHAURAI 0 thi. Is liye system
+    jab invoice ki height naap raha tha to har line toot kar lamba ho raha tha.
+  • Asli invoice 239mm thi, magar system ko 684mm lag rahi thi (2.9 guna).
+  • Is liye system ne invoice ko 35% size par chhota kar diya. Yehi wajah thi.
+  • "3 sheets" bhi usi wajah se — page ki height "auto" thi.
+
+AB KYA FIX HUA:
+  1) Naap sahi — chaurai asli paper (72mm) ke barabar, is liye scale = 100% (koi chhotapan nahi).
+  2) Page ki height fixed: customer copy 1 page, office copy 1 page = total 2 pages
+     (pehle "3 sheets" dikhta tha).
+  3) Auto-fit ka minimum 78% (pehle 42% tak chala jata tha).
+  4) Print ke baad preview bhi 100% size dikhata hai.
+
+AGAR PHIR BHI CHHOTA LAGE (aap ka control):
+  Settings → 🖨️ Thermal Print Setup → "Print ka size"
+     [ Normal (auto-fit, 1 page) ]   [ Bara (100% — bilkul chhota nahi) ]  ← ye dabayein
+  "Bara" me text 100% size par aata hai; content zyada ho to page 2 par ja sakta hai.
+
+PRINT DIALOG MEIN (apni taraf se set karein — ek dafa):
+  • Scale = Default (100%)   • Margins = None / Minimum   • Paper = Printer 80 (72.1) x 297 mm
+
+Update: naya zip extract → Ctrl+Shift+R (ek dafa).
