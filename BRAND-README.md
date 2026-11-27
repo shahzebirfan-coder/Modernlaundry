@@ -1398,3 +1398,17 @@ customer + office  →  exactly 2 pages (33 nahi)
 Naya `tprintpages.js` (16 ✓) + updated `tprintsize`/`tprintfix`/`tfitoffice`/`tprintiframe`.
 Sab **16 suites + test_recovery** green.
 Version: `?v=20261124.4`, sw `modern-dry-cleaners-pos-v59`.
+
+### 20.1 CUT LINE — credit ke foran baad (`?v=20261124.5` / sw `v60`)
+
+Client: *"Page 1 customer copy me Celinesoft + developer details ke baad foran cut aana chahiye…
+phir page 2 Office copy me bhi same."*
+
+- `.print-slip .dev-credit::after` — credit block ke neeche **`✂ - - - CUT HERE - - - ✂`**
+  + `border-bottom: 2px dashed #000` (roll wahin se kaata jaye).
+- **Dono copies par** (customer + office), kyunki dono `.dev-credit` se khatam hoti hain.
+- Sirf **PRINT** par — customer PDF / WhatsApp copy me nahi
+  (`invoice-pdf.js` me `wantCut = opts.cutLine === true`, WhatsApp `cutLine` nahi bhejta).
+- Cut line content ke saath hi naapti hai (::after) — koi extra page nahi. Page count 2 hi rehta hai.
+- `tprintpages.js` me 5 naye asserts (21 ✓ total).
+
