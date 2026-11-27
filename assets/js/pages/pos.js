@@ -13,6 +13,16 @@ let posState = {
 function renderPOS() {
   const content = `
     <div class="pos-layout">
+      <!-- ⭐ ROZANA ITEMS — client: "daily use items ek side baar pe show karein"
+           Ek tap se cart me chala jata hai (cashier ki speed ke liye). -->
+      <aside class="pos-quick" id="posQuick">
+        <div class="qp-head">
+          <span>⭐ Rozana Items</span>
+          <button class="qp-edit" id="qpEditBtn" title="List badlein">✏️</button>
+        </div>
+        <div class="qp-list" id="qpList"></div>
+      </aside>
+
       <div class="pos-products">
         <div class="pos-search">
           <input id="posSearch" placeholder="🔍 ${t('pos.searchProducts')}" value="${escapeHtml(posState.search)}"/>
@@ -33,6 +43,15 @@ function renderPOS() {
           <span class="name" id="custName">${t('pos.walkin')}</span>
           <button class="btn btn-secondary btn-sm" id="chooseCustBtn">Change</button>
         </div>
+        <!-- ⚠️ PURANA BAQI alert — client: "Red mein show karein, customer ko inform karo" -->
+        <div class="prev-bal-alert" id="prevBalAlert" style="display:none;">
+          <div class="pba-main">⚠️ <b id="pbaText"></b></div>
+          <div class="pba-note">Customer ko batayein — ye purana baqi is nayi invoice ke sath jud jayega.</div>
+          <div class="pba-actions">
+            <button class="btn btn-sm pba-add" id="pbaAddBtn">➕ Invoice me shamil karein</button>
+            <button class="btn btn-sm pba-skip" id="pbaSkipBtn">Is dafa nahi</button>
+          </div>
+        </div>
         <div class="cart-items" id="cartItems"></div>
         <div class="cart-summary" id="cartSummary"></div>
       </div>
@@ -41,9 +60,13 @@ function renderPOS() {
   $('#app').innerHTML = renderLayout('pos', content);
   bindLayout();
 
+  renderQuickPicks();
   renderPosCats();
   renderPosGrid();
   renderCart();
+
+  const qpEdit = $('#qpEditBtn');
+  if (qpEdit) qpEdit.onclick = openQuickPickEditor;
 
   $('#posSearch').oninput = (e) => { posState.search = e.target.value; renderPosGrid(); };
   $('#clearCart').onclick = () => { posState.cart = []; posState.discountValue = 0; renderCart(); };
@@ -63,6 +86,88 @@ function renderPOS() {
   }
   $('#addProductQuick').onclick = openQuickAdd;
   $('#posQuickPay').onclick = () => openQuickPay();
+}
+
+/* ============================================================
+   ⭐ ROZANA ITEMS (quick picks) — side rail
+   Client: "daily use items (Shalwar Suit, Open Shirt, Dress Pant, Bedsheet)
+   ek side baar par show karein taake jaldi book ho jaye."
+   ============================================================ */
+function renderQuickPicks() {
+  const box = $('#qpList');
+  if (!box) return;
+  let items = [];
+  try { items = (typeof DB.quickPicks === 'function') ? DB.quickPicks() : []; } catch (e) { items = []; }
+  if (!items.length) {
+    box.innerHTML = `<div class="qp-empty">Koi rozana item nahi.<br><button class="btn btn-secondary btn-sm" id="qpEmptyBtn">➕ Add karein</button></div>`;
+    const b = $('#qpEmptyBtn'); if (b) b.onclick = openQuickPickEditor;
+    return;
+  }
+  box.innerHTML = items.map(p => {
+    const inCart = (posState.cart || []).find(c => c.productId === p.id);
+    return `<button type="button" class="qp-item ${inCart ? 'in-cart' : ''}" data-id="${p.id}" title="${escapeHtml(p.name)} — ${fmtMoney(p.price)}">
+      <span class="qp-emoji">${productImageHTML(p.image, 40)}</span>
+      <span class="qp-text">
+        <span class="qp-name">${escapeHtml(p.name)}</span>
+        <span class="qp-price">${fmtMoney(p.price)}</span>
+      </span>
+      ${inCart ? `<span class="qp-badge">${inCart.qty}</span>` : ''}
+    </button>`;
+  }).join('');
+
+  box.querySelectorAll('.qp-item').forEach(b => {
+    b.onclick = () => {
+      addToCart(b.dataset.id);
+      try { SoundFX.play('click'); } catch (e) {}
+      renderQuickPicks();                 // badge update
+    };
+  });
+}
+
+/* Rozana items ki list badalne ka modal */
+function openQuickPickEditor() {
+  const products = DB.all('products').filter(p => p.active !== false);
+  const cur = new Set(((DB.all('quickPicks') || []).map(q => q.productId)));
+  const html = `
+    <h3>⭐ Rozana Items — list badlein</h3>
+    <p class="sub">Jo items roz book hote hain unhe tick karein. Ye POS ki left side par ek tap ke liye aa jayenge.</p>
+    <input id="qpSearch" placeholder="🔍 Item dhundein..." style="width:100%;margin-bottom:10px;padding:10px 12px;border:2px solid var(--border);border-radius:10px;"/>
+    <div id="qpPickList" style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:10px;"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="qpClose">Close</button>
+      <button class="btn btn-primary" id="qpSave">💾 Save</button>
+    </div>`;
+  openModal(html, { large: true, onOpen(m) {
+    const listEl = $('#qpPickList', m);
+    const draw = (q = '') => {
+      const ql = q.toLowerCase();
+      const rows = products.filter(p => !ql || p.name.toLowerCase().includes(ql) || String(p.category).includes(ql));
+      listEl.innerHTML = rows.length ? rows.map(p => `
+        <label class="qp-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;">
+          <input type="checkbox" data-pid="${p.id}" ${cur.has(p.id) ? 'checked' : ''}/>
+          <span style="flex:1;"><b>${escapeHtml(p.name)}</b></span>
+          <span style="color:var(--text-soft);font-size:12px;">${fmtMoney(p.price)}</span>
+        </label>`).join('') : `<div class="empty" style="padding:20px;">No item found</div>`;
+      listEl.querySelectorAll('input[data-pid]').forEach(cb => {
+        cb.onchange = () => { if (cb.checked) cur.add(cb.dataset.pid); else cur.delete(cb.dataset.pid); };
+      });
+    };
+    draw();
+    $('#qpSearch', m).oninput = e => draw(e.target.value);
+    $('#qpClose', m).onclick = closeModal;
+    $('#qpSave', m).onclick = () => {
+      /* list dobara banao (products ke order me) */
+      DB._data.quickPicks = [];
+      let sort = 0;
+      products.forEach(p => { if (cur.has(p.id)) { sort += 1; DB.addQuickPick(p.id); } });
+      /* sort number theek karo */
+      (DB._data.quickPicks || []).forEach((q, idx) => { q.sort = idx + 1; });
+      DB.save();
+      closeModal();
+      toast('Rozana items save ho gaye', 'success');
+      renderQuickPicks();
+    };
+  }});
 }
 
 function renderPosCats() {
@@ -99,12 +204,25 @@ function renderPosGrid() {
   }
   $('#posGrid').innerHTML = filtered.map(p => `
     <div class="product-tile" data-id="${p.id}">
+      <button class="star-pill ${DB.isQuickPick && DB.isQuickPick('qp_' + p.id) ? 'on' : ''}" data-star="${p.id}" title="Rozana items me shamil / nikal dein">${DB.isQuickPick && DB.isQuickPick('qp_' + p.id) ? '★' : '☆'}</button>
       <div class="add-pill">+</div>
       <div class="img">${productImageHTML(p.image, 160)}</div>
       <div class="pname">${escapeHtml(p.name)}</div>
       <div class="pprice">${fmtMoney(p.price)}</div>
     </div>
   `).join('');
+  /* ⭐ product tile se hi rozana list me add/remove */
+  $$('.star-pill').forEach(b => b.onclick = (ev) => {
+    ev.stopPropagation();
+    const pid = b.dataset.star;
+    DB.toggleQuickPick('qp_' + pid);
+    const on = !!(DB.isQuickPick && DB.isQuickPick('qp_' + pid));
+    b.classList.toggle('on', on);
+    b.textContent = on ? '★' : '☆';
+    renderQuickPicks();
+    toast(on ? '⭐ Rozana items me shamil ho gaya' : 'Rozana items se hata diya', 'success');
+  });
+
   $$('.product-tile').forEach(t => t.onclick = (ev) => {
     const tile = ev.currentTarget;
     addToCart(tile.dataset.id);
@@ -179,6 +297,56 @@ function calcCartTotals() {
            deliveryCharge, taxOnCharge, currentBill, prevBalance, total };
 }
 
+/* ============================================================
+   ⚠️ PURANA BAQI ALERT (cart ke andar, RED)
+   Client: "invoice banate hue customer name enter ho jaye, phir agar us ka
+   previous balance hai to niche RED alert show karein — customer ko inform karo."
+   ============================================================ */
+function paintPrevBalanceAlert() {
+  const box = $('#prevBalAlert');
+  if (!box) return;
+  const cid = posState.customerId;
+  if (!cid || cid === 'cu1') { box.style.display = 'none'; return; }
+
+  const total = (typeof customerOpenBalance === 'function') ? customerOpenBalance(cid) : 0;
+  const already = Math.max(0, +(posState.prevBalance) || 0);
+  const open = Math.max(0, total - already);
+  const cust = DB.get('customers', cid) || {};
+  const ob = (typeof DB.customerOpeningBalance === 'function') ? DB.customerOpeningBalance(cid) : 0;
+
+  if (total <= 0) { box.style.display = 'none'; return; }
+
+  const txt = $('#pbaText');
+  if (txt) {
+    txt.textContent = (open > 0)
+      ? `${cust.name || 'Is customer'} ka PURANA BAQI ${fmtMoney(open)} hai`
+      : `${cust.name || 'Is customer'} ka purana baqi ${fmtMoney(total)} invoice me shamil ho chuka hai`;
+  }
+  const note = box.querySelector('.pba-note');
+  if (note) {
+    note.innerHTML = (open > 0)
+      ? `Register/paper wala baqi: <b>${fmtMoney(ob)}</b>${total - ob > 0 ? ` • Pichli invoices ka baqi: <b>${fmtMoney(total - ob)}</b>` : ''}<br>Customer ko batayein — ye nayi invoice ke sath jud jayega.`
+      : `Total ab: <b>${fmtMoney(total)}</b> — grand total me shamil hai.`;
+  }
+  const addBtn = $('#pbaAddBtn');
+  const skipBtn = $('#pbaSkipBtn');
+  if (addBtn) {
+    addBtn.style.display = open > 0 ? '' : 'none';
+    addBtn.onclick = () => {
+      posState.prevBalance = total;
+      paintPrevBalanceAlert();
+      if ($('#prevBalInput')) $('#prevBalInput').value = total;
+      if (typeof toast === 'function') toast(`Purana baqi ${fmtMoney(total)} invoice me shamil`, 'success');
+      renderCart();
+    };
+  }
+  if (skipBtn) {
+    skipBtn.style.display = open > 0 ? '' : 'none';
+    skipBtn.onclick = () => { box.style.display = 'none'; };
+  }
+  box.style.display = 'block';
+}
+
 function renderCart() {
   const items = posState.cart;
   const cust = DB.get('customers', posState.customerId);
@@ -196,6 +364,9 @@ function renderCart() {
     ? `${cust.name}${cust.phone? ` • ${cust.phone}`:''}${cust.loyaltyActive? ` ⭐${cust.loyaltyDiscountPercent}%`: (cust.loyaltyExpiry && cust.loyaltyExpiry < isoDay() ? ' ❌ Expired' : '')}`
     : 'Walk-in Customer';
   $('#custName').textContent = custLabel;
+
+  /* ⚠️ PURANA BAQI — RED alert (client: "customer name enter hote hi niche alert show karein") */
+  paintPrevBalanceAlert();
 
   if (!items.length) {
     $('#cartItems').innerHTML = `<div class="cart-empty"><div class="emoji">🛒</div><div>Cart is empty<br><small>Tap a product to add it</small></div></div>`;
@@ -439,7 +610,8 @@ function renderCart() {
 */
 function customerOpenBalance(customerId, excludeOrderId) {
   if (!customerId || customerId === 'cu1') return 0;
-  let bal = 0;
+  /* purana baqi jo customer form se register/paper se record hua (openingBalance) */
+  let bal = (typeof DB.customerOpeningBalance === 'function') ? DB.customerOpeningBalance(customerId) : 0;
   (DB.all('orders') || []).forEach(o => {
     if (o.customerId !== customerId) return;
     if (excludeOrderId && o.id === excludeOrderId) return;
@@ -506,9 +678,12 @@ function openBookingForm() {
     <p class="sub">Fill customer & delivery details, then choose payment.</p>
 
     <!-- Purana baqi reminder (jab customer chuna jaye) -->
-    <div id="prevBalBanner" style="display:none;background:#fee2e2;border-left:4px solid #ef4444;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;color:#991b1b;font-weight:700;">
-      ⚠️ <span id="prevBalTxt"></span>
-      <button type="button" class="btn btn-danger btn-sm" id="addPrevBalBtn" style="margin-top:6px;display:block;">➕ Add to this invoice</button>
+    <div id="prevBalBanner" class="prev-bal-alert" style="display:none;margin:0 0 12px;">
+      <div class="pba-main">⚠️ <b id="prevBalTxt"></b></div>
+      <div class="pba-note" id="prevBalNote"></div>
+      <div class="pba-actions">
+        <button type="button" class="btn btn-sm pba-add" id="addPrevBalBtn">➕ Invoice me shamil karein</button>
+      </div>
     </div>
 
     <!-- Booking Info -->
@@ -718,6 +893,10 @@ function openBookingForm() {
       phoneSug.style.display = 'none';
       nameSug.style.display = 'none';
       toast(`Customer found: ${c.name}`, 'success');
+      /* purana baqi — customer milte hi (booking form me) RED alert */
+      if (typeof posState._showPrevBalance === 'function' && c && c.id && c.id !== 'cu1') {
+        try { posState._showPrevBalance(c.id); } catch (e) {}
+      }
       // Highlight all filled fields briefly
       [phoneInp, nameInp, addrInp].forEach(el => {
         if (!el) return;
@@ -818,8 +997,12 @@ function openBookingForm() {
     const showPrevBalance = (customerId) => {
       if (!prevBanner) return;
       const bal = (typeof customerOpenBalance === 'function') ? customerOpenBalance(customerId) : 0;
+      const _c = DB.get('customers', customerId) || {};
+      const _ob = (typeof DB.customerOpeningBalance === 'function') ? DB.customerOpeningBalance(customerId) : 0;
       if (bal > 0) {
-        $('#prevBalTxt', m).textContent = `Is customer ka PURANA BAQI ${fmtMoney(bal)} hai.`;
+        $('#prevBalTxt', m).textContent = `${_c.name || 'Customer'} ka PURANA BAQI ${fmtMoney(bal)} hai`;
+        const _note = $('#prevBalNote', m);
+        if (_note) _note.innerHTML = `Register/paper wala baqi: <b>${fmtMoney(_ob)}</b>` + (bal - _ob > 0 ? ` • Pichli invoices ka baqi: <b>${fmtMoney(bal - _ob)}</b>` : '') + `<br>Customer ko batayein — invoice ke grand total me shamil ho sakta hai.`;
         prevBanner.style.display = 'block';
         const addBtn = $('#addPrevBalBtn', m);
         if (addBtn) addBtn.onclick = () => {
@@ -832,6 +1015,7 @@ function openBookingForm() {
       }
     };
     if (posState.customerId && posState.customerId !== 'cu1') showPrevBalance(posState.customerId);
+    posState._showPrevBalance = showPrevBalance;
     // customer badle to dobara check
     const _origFill = fillCustomer;
     fillCustomer.__showBal = true;

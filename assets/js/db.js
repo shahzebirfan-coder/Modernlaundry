@@ -176,6 +176,16 @@ const DB = {
         this.save();
       }
 
+      /* === POS ROZANA ITEMS (quick picks) — ek dafa seed karo ===
+         Client: "daily use items (Shalwar Suit, Open Shirt, Dress Pant, Bedsheet)
+         ek side par show karein taake jaldi book ho jaye." */
+      if (this._data && +((this._data.settings||{})._quickPicksV || 0) < 1) {
+        this._ensureQuickPicks();
+        this._data.settings = this._data.settings || {};
+        this._data.settings._quickPicksV = 1;
+        this.save();
+      }
+
       // Thermal printer defaults — applied once, never overrides a client's own choice.
       // This makes an existing install plug & play with a receipt printer too.
       const st = this._data.settings;
@@ -249,6 +259,10 @@ const DB = {
         { id: 'u1', name: typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.adminName : 'Admin', username: typeof CLIENT_CONFIG !== 'undefined' ? CLIENT_CONFIG.adminUsername : 'admin', role: 'admin', createdAt: now },
         { id: 'u2', name: 'AI Bot Cashier', username: 'aibot', role: 'cashier', createdAt: now }
       ],
+      /* POS ke "ROZANA ITEMS" — client ki requirement: jo items roz book hote hain
+         (Shalwar Suit, Open Shirt, Dress Pant, Bedsheet...) ek tap me side par.
+         Ye auto-migration se bhi bante hain (purane installs ke liye). */
+      quickPicks: [],
       categories: [
         { id: 'cgents',  name: 'Gents Wear',  icon: '👔' },
         { id: 'cladies', name: 'Ladies Wear', icon: '🥻' },
@@ -420,6 +434,72 @@ const DB = {
   },
 
   all(table)  { return this._data[table] || []; },
+
+  /* ===== POS ROZANA ITEMS (quick picks) ===== */
+  _ensureQuickPicks() {
+    const list = (typeof QUICK_PICK_DEFAULTS !== 'undefined') ? QUICK_PICK_DEFAULTS : [];
+    const products = this._data.products || [];
+    if (!Array.isArray(this._data.quickPicks)) this._data.quickPicks = [];
+    const have = new Set(this._data.quickPicks.map(q => String(q.productId)));
+    const byName = {};
+    products.forEach(p => { byName[String(p.name).trim().toLowerCase()] = p; });
+    list.forEach((name, i) => {
+      const p = byName[String(name).trim().toLowerCase()];
+      if (!p || have.has(p.id)) return;
+      this._data.quickPicks.push({ id: 'qp_' + p.id, productId: p.id, sort: i + 1, createdAt: new Date().toISOString() });
+      have.add(p.id);
+    });
+    return this._data.quickPicks;
+  },
+
+  /* Quick pick items (product objects, sort ke hisaab se). Khali ho to default seed karo. */
+  quickPicks() {
+    if (!Array.isArray(this._data.quickPicks)) this._ensureQuickPicks();
+    const qs = (this._data.quickPicks || []).slice().sort((a, b) => (+a.sort || 99) - (+b.sort || 99));
+    const out = [];
+    qs.forEach(q => {
+      const p = (this._data.products || []).find(x => x.id === q.productId);
+      if (p && p.active !== false) out.push(p);
+    });
+    return out;
+  },
+
+  isQuickPick(productId) {
+    return (this._data.quickPicks || []).some(q => String(q.productId) === String(productId));
+  },
+
+  /* Rozana item add / remove (POS par "⭐" button) */
+  toggleQuickPick(productId) {
+    if (!Array.isArray(this._data.quickPicks)) this._data.quickPicks = [];
+    const i = this._data.quickPicks.findIndex(q => String(q.productId) === String(productId));
+    if (i >= 0) this._data.quickPicks.splice(i, 1);
+    else {
+      const maxSort = this._data.quickPicks.reduce((m, q) => Math.max(m, +q.sort || 0), 0);
+      this._data.quickPicks.push({ id: 'qp_' + productId, productId, sort: maxSort + 1, createdAt: new Date().toISOString() });
+    }
+    this.save();
+    return this.isQuickPick(productId);
+  },
+
+  /* Naya product banate hi rozana item bhi (chhoti list me sab se pehle) */
+  addQuickPick(productId) {
+    if (this.isQuickPick(productId)) return;
+    if (!Array.isArray(this._data.quickPicks)) this._data.quickPicks = [];
+    const maxSort = this._data.quickPicks.reduce((m, q) => Math.max(m, +q.sort || 0), 0);
+    this._data.quickPicks.push({ id: 'qp_' + productId, productId, sort: maxSort + 1, createdAt: new Date().toISOString() });
+    this.save();
+  },
+
+  /* ===== CUSTOMER OPENING / PREVIOUS BALANCE =====
+     Client: "naya customer add karte waqt cashier purana baqi (paper register se)
+     record kar sake, taake future me asani ho."
+     Model: customer.openingBalance (register se) + us ke orders ka `due`.
+     Ye balance ledger me bhi khata hai (DB.customerBalance). */
+  customerOpeningBalance(customerId) {
+    const c = (this._data.customers || []).find(x => x.id === customerId);
+    return Math.max(0, Math.round(+(c && c.openingBalance) || 0));
+  }
+,
   get(table, id) { return (this._data[table] || []).find(r => r.id === id); },
   insert(table, record) {
     /* naya product: pieces-per-unit naam se khud set ho jaye (owner edit kar sakta hai) */
@@ -871,6 +951,16 @@ const DB = {
 };
 
 /* ============================================================
+   POS — ROZANA ITEMS (quick picks) ke default naam
+   Client: "ju main products hain ju daily use hote hain woh ek side baar pe show karein"
+   ============================================================ */
+const QUICK_PICK_DEFAULTS = [
+  'Shalwar Suit', 'Open Shirt', 'Dress Pant', 'Suit 2 Pcs', 'Suit 3 Pcs',
+  'Kurta', 'Shirt (Press)', 'Pant', 'Coat', 'Bedsheet Double', 'Bedsheet Single',
+  'Blanket Double', 'Dupatta', 'Shalwar Suit (Press)'
+];
+
+/* ============================================================
    MR LAUNDRY OFFICIAL RATE LIST
    Update prices here, then click "Import/Reset Price List" in admin Products page.
    ============================================================ */
@@ -1017,6 +1107,17 @@ function getMrLaundryRateList() {
   }));
 }
 DB.load();
+
+/* === POS ROZANA ITEMS — fresh install par bhi defaults (ek dafa flag ke sath) ===
+   Agar cashier sab items hata de to flag ki wajah se wapis nahi aayenge. */
+try {
+  if (DB._data && +(((DB._data.settings || {})._quickPicksV) || 0) < 1) {
+    DB._ensureQuickPicks();
+    DB._data.settings = DB._data.settings || {};
+    DB._data.settings._quickPicksV = 1;
+    DB.save();
+  }
+} catch (e) { /* chup chhap — app na tootey */ }
 
 /* === Auto-cleanup photos from delivered orders older than X days === */
 function cleanupOldPhotos(force) {

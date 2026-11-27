@@ -1,10 +1,12 @@
 /* ============================================================
    RESPONSIVE DESIGN — Auto-adapt to Desktop / Tablet / Mobile
    Breakpoints:
-   - Desktop:      > 1280px  (full sidebar + 3-column POS)
-   - Small Laptop: 1024-1280 (full sidebar + 2-column POS)
-   - Tablet:       768-1024  (icon-only sidebar + tooltips + stacked POS)
-   - Mobile:       < 768     (hamburger menu, bottom-sheet cart, card-style tables)
+   - Desktop:      > 1500px  (mota sidebar + bara POS, 3 columns)
+   - Small Laptop: 1280-1500 (full sidebar + 3-column POS, chhoti rail)
+   - Laptop:       1024-1280 (full sidebar + 3-column POS with narrow rail)
+   - Tablet:        768-1024 (icon-only sidebar + stacked POS)
+   - Mobile:        < 768    (hamburger menu, bottom-sheet cart, card-style tables)
+   Rozana Items rail har size par maujood rehti hai (client requirement).
    ============================================================ */
 
 /* Mobile menu button hidden by default */
@@ -14,7 +16,12 @@
    SMALL LAPTOP (1024–1280px)
    ============================================================ */
 @media (max-width: 1280px) {
-  .pos-layout { grid-template-columns: minmax(0, 1fr) 380px; }
+  /* rozana rail chhoti lekin maujood — products + cart ke sath 3 columns */
+  .pos-layout { grid-template-columns: 176px minmax(0, 1fr) 336px; gap: 12px; }
+  .pos-quick { padding: 8px 6px; }
+  .qp-item { padding: 7px 6px; min-height: 50px; gap: 7px; }
+  .qp-item .qp-emoji { width: 28px; height: 28px; font-size: 18px; }
+  .pos-quick .qp-head { font-size: 12px; }
   .product-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .grid-stats { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 }
@@ -91,6 +98,11 @@
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     max-height: 50vh;
   }
+  /* Rozana Items tablet par horizontal strip (products ke upar) */
+  .pos-quick { padding: 10px; }
+  .pos-quick .qp-list { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: 8px; }
+  .pos-quick .qp-list .qp-item { min-width: 132px; }
+  .pos-quick .qp-head { padding-bottom: 6px; margin-bottom: 6px; }
 
   /* Stats grid: 2 per row */
   .grid-stats { grid-template-columns: repeat(2, 1fr) !important; }
@@ -209,12 +221,16 @@
   .stat-card .ic { width: 44px; height: 44px; font-size: 20px; }
   .stat-card .val { font-size: 18px; }
 
-  /* POS layout: products on top, cart as bottom sheet */
+  /* POS layout: rozana strip + products on top, cart as bottom sheet */
   .pos-layout {
     grid-template-columns: minmax(0, 1fr);
     height: auto;
     gap: 0;
   }
+  .pos-quick { margin: 0 0 10px; padding: 10px 8px; border-radius: 14px; }
+  .pos-quick .qp-list { flex-direction: row; overflow-x: auto; overflow-y: hidden; gap: 8px; }
+  .pos-quick .qp-list .qp-item { min-width: 118px; min-height: 56px; }
+  .pos-quick .qp-head { font-size: 12.5px; }
   .pos-products { padding-bottom: 0; }
   .product-grid {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -425,7 +441,7 @@
    ULTRA-WIDE DESKTOPS (>1600px) — More columns
    ============================================================ */
 @media (min-width: 1600px) {
-  .pos-layout { grid-template-columns: minmax(0, 1fr) 460px; }
+  .pos-layout { grid-template-columns: 268px minmax(0, 1fr) 460px; gap: 20px; }
   .product-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
   .page { max-width: 1500px; width: 100%; margin: 0 auto; }
 }

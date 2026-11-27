@@ -18,7 +18,7 @@ function renderCustomers() {
       <table class="tbl">
         <thead><tr>
           <th>Name</th><th>Phone</th><th>⭐ Loyalty</th><th>Discount</th>
-          <th>Orders</th><th>Spent</th><th>Joined</th><th>Actions</th>
+          <th>Orders</th><th>Spent</th><th>Baqi</th><th>Joined</th><th>Actions</th>
         </tr></thead>
         <tbody id="custBody"></tbody>
       </table>
@@ -43,7 +43,7 @@ function renderCustomersBody() {
 
   const orders = DB.all('orders');
   if (!customers.length) {
-    $('#custBody').innerHTML = `<tr><td colspan="8"><div class="empty"><div class="emoji">👤</div><h4>No customers</h4></div></td></tr>`;
+    $('#custBody').innerHTML = `<tr><td colspan="9"><div class="empty"><div class="emoji">👤</div><h4>No customers</h4></div></td></tr>`;
     return;
   }
   $('#custBody').innerHTML = customers.map(c => {
@@ -58,6 +58,10 @@ function renderCustomersBody() {
       <td>${c.loyaltyActive ? `<b>${c.loyaltyDiscountPercent}%</b>` : '-'}</td>
       <td>${myOrders.length}</td>
       <td><b>${fmtMoney(spent)}</b></td>
+      <td>${(() => {
+        const bal = (typeof customerOpenBalance === 'function') ? customerOpenBalance(c.id) : 0;
+        return bal > 0 ? `<b style="color:#b91c1c;">${fmtMoney(bal)}</b>` : '<span style="color:var(--text-mute);">—</span>';
+      })()}</td>
       <td>${fmtDateShort(c.createdAt)}</td>
       <td>
         <button class="btn btn-secondary btn-sm" data-act="history" data-id="${c.id}">📜</button>
@@ -88,6 +92,26 @@ function openCustomerForm(existing, callback) {
     </div>
     <div class="form-row cols-1">
       <div class="field"><label>Address</label><input id="cAddr" value="${escapeHtml(c.address)}"/></div>
+    </div>
+
+    <!-- PURANA BAQI — client: "naya customer add karte waqt cashier purana baqi
+         (paper register se) record kar sake, taake future me asani ho" -->
+    <div style="background:#fff5f5;border:2px solid #fecaca;border-radius:10px;padding:14px;margin-top:6px;">
+      <div style="font-weight:800;margin-bottom:4px;color:#b91c1c;">📋 Purana Baqi (Previous Balance)</div>
+      <div style="font-size:12px;color:#7f1d1d;margin-bottom:10px;">
+        Agar is customer ka pehle se koi baqi hai (purane register / paper notes se), yahan likh dein.
+        Ye har invoice par RED alert me dikhega aur ledger me bhi shamil rahega.
+      </div>
+      <div class="form-row" style="margin-bottom:0;">
+        <div class="field" style="margin:0;">
+          <label>Purana Baqi (Rs.)</label>
+          <input type="number" id="cOpeningBal" min="0" step="1" value="${(c.openingBalance||0) || ''}" placeholder="0"/>
+        </div>
+        <div class="field" style="margin:0;">
+          <label>Note (optional)</label>
+          <input id="cOpeningNote" value="${escapeHtml(c.openingNote||'')}" placeholder="e.g. register page 12, 3 suits pending"/>
+        </div>
+      </div>
     </div>
 
     <div style="background:var(--surface-alt);border-radius:10px;padding:14px;margin-top:10px;">
@@ -146,7 +170,10 @@ function openCustomerForm(existing, callback) {
         loyaltyActive: $('#cLoyActive', m).checked,
         loyaltyExpiry: $('#cLoyExp', m).value,
         isB2B: $('#cIsB2B', m).checked,
-        b2bDiscount: Math.max(0, +$('#cB2bDisc', m).value || 0)
+        b2bDiscount: Math.max(0, +$('#cB2bDisc', m).value || 0),
+        /* purana baqi — naya customer add karte waqt register se record */
+        openingBalance: Math.max(0, Math.round(+($('#cOpeningBal', m).value) || 0)),
+        openingNote: $('#cOpeningNote', m).value.trim()
       };
       let saved;
       if (existing) saved = DB.update('customers', existing.id, data);
@@ -163,6 +190,9 @@ function openCustomerHistory(custId) {
   const orders = DB.all('orders').filter(o => o.customerId === custId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
   const total = orders.reduce((s,o)=>s+(o.total||0),0);
   const due = orders.reduce((s,o)=>s+(o.due||0),0);
+  /* purana baqi (register se) + invoices ka due = kul outstanding */
+  const opening = (typeof DB.customerOpeningBalance === 'function') ? DB.customerOpeningBalance(custId) : 0;
+  const outTotal = due + opening;
 
   const rows = orders.length ? orders.map(o => `
     <tr>
@@ -182,8 +212,12 @@ function openCustomerHistory(custId) {
       📞 ${escapeHtml(c.phone||'-')}
       ${c.loyaltyActive?` • ⭐ ${escapeHtml(c.loyaltyNo)} (${c.loyaltyDiscountPercent}%)`:''}
       • Total Spent: <b>${fmtMoney(total)}</b>
-      ${due>0?` • Outstanding: <b style="color:var(--danger);">${fmtMoney(due)}</b>`:''}
+      ${outTotal>0?` • Outstanding: <b style="color:var(--danger);">${fmtMoney(outTotal)}</b>`:''}
     </p>
+    ${opening>0?`<div class="prev-bal-alert" style="margin:0 0 12px;">
+      <div class="pba-main">⚠️ Purana baqi <b>${fmtMoney(opening)}</b>${c.openingNote?` — <span style="font-weight:700;">${escapeHtml(c.openingNote)}</span>`:''}</div>
+      <div class="pba-note">Ye register/paper se record hua hai. Pichli invoices ka baqi: <b>${fmtMoney(due)}</b>.</div>
+    </div>`:''}
     <table class="tbl">
       <thead><tr><th>Invoice #</th><th>Date</th><th>Items</th><th>Status</th><th>Total</th><th>Payment</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
