@@ -529,7 +529,7 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .qty-circle .num { font-size: 30px !important; }
   .qty-circle .lbl { font-size: 8px !important; letter-spacing: .5px !important; }
   .del-type-pill { padding: 2px 10px !important; font-size: 11px !important; }
-  .inv-logo { max-height: 16mm !important; }
+  .inv-logo { max-height: 40mm !important; width: auto !important; }
   hr { margin: 3px 0 !important; }
 
   /* === ONE PAGE RULE ===
@@ -569,7 +569,7 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .print-slip.cmp1 .invoice-page table td,
   .print-slip.cmp1 .invoice-page table th { padding: 1px 0 !important; }
   .print-slip.cmp1 .invoice-page table { line-height: 1.24 !important; }
-  .print-slip.cmp1 .inv-logo { max-height: 12mm !important; }
+  .print-slip.cmp1 .inv-logo { max-height: 32mm !important; }
   .print-slip.cmp1 hr { margin: 2px 0 !important; }
   .print-slip.cmp1 .inv-terms { margin-top: 4px !important; padding-top: 3px !important; }
   .print-slip.cmp1 .inv-terms-body > div { margin-bottom: 0 !important; }
@@ -578,20 +578,30 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .print-slip.cmp2 .invoice-page table td,
   .print-slip.cmp2 .invoice-page table th { padding: 0 !important; }
   .print-slip.cmp2 .invoice-page table { line-height: 1.16 !important; }
-  .print-slip.cmp2 .inv-logo { max-height: 10mm !important; }
+  .print-slip.cmp2 .inv-logo { max-height: 26mm !important; }
   .print-slip.cmp2 .inv-terms { margin-top: 3px !important; padding-top: 2px !important; }
   .print-slip.cmp2 .inv-terms-head { font-size: 7.6px !important; margin-bottom: 2px !important; }
   .print-slip.cmp2 .inv-terms-body { font-size: 6.8px !important; line-height: 1.16 !important; }
   .print-slip.cmp2 .block-wide { font-size: 6.8px !important; line-height: 1.16 !important; }
   .print-slip.cmp2 .dev-credit { margin-top: 3px !important; padding-top: 2px !important; font-size: 7px !important; }
-  .print-slip.cmp2 .dev-credit img { max-height: 7mm !important; }
+  .print-slip.cmp2 .dev-credit img { max-height: 9mm !important; }
 
   .print-slip.cmp3 .inv-terms-body { font-size: 6.1px !important; line-height: 1.12 !important; }
   .print-slip.cmp3 .inv-terms-head { font-size: 7.2px !important; }
   .print-slip.cmp3 .block-wide { font-size: 6.2px !important; line-height: 1.12 !important; }
-  .print-slip.cmp3 .inv-logo { max-height: 8mm !important; }
+  .print-slip.cmp3 .inv-logo { max-height: 20mm !important; }
   .print-slip.cmp3 .dev-credit { font-size: 6.4px !important; }
   .print-slip.cmp3 .invoice-page table { line-height: 1.12 !important; }
+
+  /* === cmp4 — bahut bhari invoice: terms/timings/credit compact (par mojood) === */
+  .print-slip.cmp4 .inv-terms { margin-top: 2px !important; padding-top: 2px !important; }
+  .print-slip.cmp4 .inv-terms-head { font-size: 6.8px !important; margin-bottom: 1px !important; }
+  .print-slip.cmp4 .inv-terms-body { font-size: 5.7px !important; line-height: 1.1 !important; }
+  .print-slip.cmp4 .block-wide { font-size: 5.8px !important; line-height: 1.1 !important; }
+  .print-slip.cmp4 .inv-logo { max-height: 16mm !important; }
+  .print-slip.cmp4 .invoice-page table { line-height: 1.08 !important; }
+  .print-slip.cmp4 .dev-credit { font-size: 6px !important; margin-top: 2px !important; }
+  .print-slip.cmp4 .dev-credit img { max-height: 7mm !important; }
 
   /* Slip ke andar ka receipt natural flow me — ek hi andar page break */
   .print-slip .invoice-page {
@@ -606,13 +616,29 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .invoice-page table { line-height: 1.22 !important; }
   .invoice-page > div { margin-top: 2px !important; margin-bottom: 2px !important; }
   .invoice-page { padding: 3px !important; }
-  /* Logo poori slip par jagah na le — par MUST rahe */
-  .inv-logo { max-height: 15mm !important; }
+  /* Logo BARA (client: "logo big karo, bohat chota hai") — par slip par qabza na kare */
+  .inv-logo { max-height: 40mm !important; width: auto !important; }
   /* Terms: chhota par parhne ke qabil (isi liye credit + sab page 1 par aa jata hai) */
   .inv-terms { margin-top: 5px !important; padding-top: 4px !important; }
   .inv-terms-head { font-size: 8.6px !important; margin-bottom: 4px !important; }
   .inv-terms-body { font-size: 7.2px !important; line-height: 1.36 !important; }
   .inv-terms-body > div { margin-bottom: 1px !important; }
+  /* === ITEMS: ITEM | QTY | AMOUNT (client ki nayi layout) === */
+  .invoice-page table.items-tbl { table-layout: fixed !important; width: 100% !important; }
+  .invoice-page table.items-tbl td.it-name { word-break: break-word !important; }
+  .invoice-page table.items-tbl td.it-qty { text-align: center !important; white-space: nowrap !important; }
+  .invoice-page table.items-tbl td.it-amt { text-align: right !important; white-space: nowrap !important; }
+
+  /* === BOOKING / DELIVERY rows: do saaf columns, qareeb qareeb nahi === */
+  .invoice-page table.kv { table-layout: fixed !important; width: 100% !important; line-height: 1.45 !important; }
+  /* label ek hi line me (Chrome me pehle se aisa tha — ab zabardasti bhi) */
+  #printArea .invoice-page table.kv td.kv-l,
+  .invoice-page table.kv td.kv-l { white-space: nowrap !important; word-break: keep-all !important; }
+  .invoice-page table.kv td.kv-v { text-align: right !important; }
+
+  /* === DISCOUNT row dark + saaf === */
+  .invoice-page tr.disc-row td { border-top: 1px dashed #000 !important; }
+
   /* === CUT LINE (client: "credit ke baad foran cut aana chahiye") ===
      Sirf PRINT par — customer PDF / WhatsApp copy me nahi.
      Har copy (customer + office) ke credit ke neeche dashed cut line, taake
@@ -681,7 +707,9 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
       const doc2 = frame.contentWindow.document;
       const st = (typeof DB !== 'undefined' && DB.settings) ? DB.settings() : {};
       const MM2PX = 96 / 25.4;
-      const targetPx = (297 - 8) * MM2PX;            /* page 297mm − 8mm safety */
+      /* 14mm safety: printer ka non-printable area + CUT line ke liye jagah,
+         taake cut line hamesha page 1 par credit ke foran baad rahe. */
+      const targetPx = (297 - 14) * MM2PX;
       const mode = (st.printSizeMode || 'normal');
       const slips = Array.from(doc2.querySelectorAll('.print-slip'));
       if (!slips.length) return;
@@ -727,10 +755,11 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
          aur sirf aakhir me font chhota (100% → 70% se neeche kabhi nahi). */
       const setLevel = (lvl) => {
         slips.forEach(s => {
-          s.classList.remove('cmp1', 'cmp2', 'cmp3');
+          s.classList.remove('cmp1', 'cmp2', 'cmp3', 'cmp4');
           if (lvl >= 1) s.classList.add('cmp1');
           if (lvl >= 2) s.classList.add('cmp2');
           if (lvl >= 3) s.classList.add('cmp3');
+          if (lvl >= 4) s.classList.add('cmp4');
         });
       };
       const tryLevel = (level, scale) => {
@@ -743,12 +772,14 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
       else if (tryLevel(1, 1)) { lvl = 1; k = 1; }
       else if (tryLevel(2, 1)) { lvl = 2; k = 1; }
       else if (tryLevel(3, 1)) { lvl = 3; k = 1; }
+      else if (tryLevel(4, 1)) { lvl = 4; k = 1; }
       else {
-        lvl = 3; k = 1;
-        for (let i = 0; i < 10; i++) {
+        /* aakhri hal: cmp4 + font step-down (floor 65% — is se neeche nahi) */
+        lvl = 4; k = 1;
+        for (let i = 0; i < 12; i++) {
           k = Math.round((k - 0.03) * 100) / 100;
-          if (k < 0.7) k = 0.7;
-          if (tryLevel(3, k) || k <= 0.7) break;
+          if (k < 0.65) k = 0.65;
+          if (tryLevel(4, k) || k <= 0.65) break;
         }
       }
       slips.forEach(s => { s.dataset.fitScale = String(k); });

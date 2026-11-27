@@ -181,7 +181,12 @@ const DB = {
       const st = this._data.settings;
       if (st && !st._thermalDefaults) {
         if (st.invoicePaper == null)    st.invoicePaper = '80';
-        if (st.invoiceLogoSize == null) st.invoiceLogoSize = 70;
+        /* logo bara (client: "BRAND ka logo big karo, bohat chota hai") */
+        if (st.invoiceLogoSize == null || st._logoBigV !== 1) {
+          st.invoiceLogoSize  = Math.max(+st.invoiceLogoSize || 0, 100);
+          st.invoiceLogoMaxMm = Math.max(+st.invoiceLogoMaxMm || 0, 32);
+          st._logoBigV = 1;
+        }
         if (st.invoiceLogoMono == null) st.invoiceLogoMono = true;
         if (st.invoiceMarginMm == null) st.invoiceMarginMm = 2;
         if (st.invoiceShowLogo == null) st.invoiceShowLogo = true;
@@ -312,9 +317,9 @@ const DB = {
         invoiceWidth: 360,             // max width in px (thermal=300, A6=420, A5=560)
         // ===== THERMAL RECEIPT DEFAULTS (plug & play) =====
         invoicePaper: '80',            // '58' = 58mm roll, '80' = 80mm roll
-        invoiceLogoSize: 70,           // logo width as % of paper width (70 = tidy header)
+        invoiceLogoSize: 100,          // logo width as % of paper width (100 = poora header)
         invoiceLogoMono: true,         // 1-bit black & white for thermal heads
-        invoiceLogoMaxMm: 20,          // max logo height on paper (mm) — stops huge logos
+        invoiceLogoMaxMm: 32,          // max logo height on paper (mm) — bara magar page na khaye
         invoiceLogoThreshold: 185,     // 1-bit cut-off: higher = bolder / keeps hairlines
         invoiceMarginMm: 2,            // page margin in mm
         _thermalDefaults: 1,           // marks that defaults were applied
@@ -335,7 +340,7 @@ const DB = {
         invoiceTerms: (typeof CLIENT_CONFIG !== 'undefined' && CLIENT_CONFIG.invoiceTerms)
           ? CLIENT_CONFIG.invoiceTerms
           : 'Items not collected within 30 days are non-refundable.',
-        invoiceShowTerms: false,
+        invoiceShowTerms: true,           // client: terms har invoice par (Portal se badla ja sakta hai)
         // Office-copy & WhatsApp settings
         printDualCopy: true,           // when true, prints customer + office copy together
         officeCopyWidth: 280,          // small slip for office

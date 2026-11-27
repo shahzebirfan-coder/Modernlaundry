@@ -173,10 +173,15 @@ function buildInvoiceLogo(s, width, fontSize) {
   const wMm = info ? info.mm : null;
   const hMm = info ? info.mmH : null;
 
+  /* Client: "logo big karo, bohat chota hai". Thermal logo ki mm width ab
+     slip ki poori chaurai (72mm) tak — print CSS me sirf 40mm ka cap hai. */
+  const printCap = Math.max(20, +s.invoiceLogoMaxMm || 32);
   const widthCss = (isThermal && wMm)
     ? `width:${wMm}mm;max-width:${wMm}mm;`
     : `max-width:${Math.min(200, width * 0.6)}px;`;
-  const heightCss = (isThermal && hMm) ? `max-height:${hMm}mm;` : `max-height:100px;`;
+  const heightCss = (isThermal && hMm)
+    ? `max-height:${Math.max(hMm, printCap)}mm;`
+    : `max-height:${printCap}mm;`;
 
   return `<div class="inv-logo-wrap" style="text-align:center;margin:0 0 6px;">` +
          `<img class="inv-logo" src="${src}" alt="${escapeHtml(s.shopName)}" ` +
@@ -252,21 +257,31 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
   const piecesSize   = narrow ? Math.round(fontSize * 2.4) : Math.round(fontSize * 2.6);
   const packSize     = narrow ? Math.round(fontSize * 1.3) : Math.round(fontSize * 1.45);
 
+  /* ITEM | QTY | AMOUNT — client: "item ke barabar qty ka column, phir amount".
+     Rate qty ke neeche chhote mein (customer ko rate bhi pata rahe). */
   const itemsHtml = (o.items || []).map(it => `
     <tr>
-      <td style="padding:6px 0;font-size:${fontSize+1}px;font-weight:bold;">${escapeHtml(it.name)}<br><span style="font-size:${fontSize-1}px;font-weight:normal;">${it.qty} × ${fmtMoney(it.price)}</span></td>
-      <td style="text-align:right;padding:6px 0;font-size:${fontSize+1}px;font-weight:bold;">${fmtMoney(it.qty*it.price)}</td>
+      <td class="it-name" style="padding:4px 0;font-size:${fontSize}px;font-weight:bold;line-height:1.2;">${escapeHtml(it.name)}<br><span style="font-size:${Math.max(8, fontSize-3)}px;font-weight:normal;white-space:nowrap;">@ ${fmtMoney(it.price)}</span></td>
+      <td class="it-qty" style="text-align:center;padding:4px 2px;font-size:${fontSize+1}px;font-weight:900;">${it.qty}</td>
+      <td class="it-amt" style="text-align:right;padding:4px 0;font-size:${fontSize+1}px;font-weight:bold;white-space:nowrap;">${fmtMoney(it.qty*it.price)}</td>
     </tr>
   `).join('');
 
   /* Client ki requirement: BRAND logo invoice par MUST hai — setting se band nahi hota */
   const logoBlock = buildInvoiceLogo(s, width, fontSize);
 
-  const totalDisc = (o.discount || ((o.manualDiscount||0) + (o.loyaltyDiscount||0)));
-  const discountLines = showDiscount ? `
-    ${o.manualDiscount>0 ? `<tr><td style="padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">🎉 Discount${o.discountType==='percent'?` (${o.discountValue}%)`:''}:</td><td style="text-align:right;padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">- ${fmtMoney(o.manualDiscount)}</td></tr>` : ''}
-    ${o.loyaltyDiscount>0 ? `<tr><td style="padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">⭐ Loyalty (${o.loyaltyPercent||''}%):</td><td style="text-align:right;padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">- ${fmtMoney(o.loyaltyDiscount)}</td></tr>` : ''}
-    ${(!o.manualDiscount && !o.loyaltyDiscount && totalDisc>0) ? `<tr><td style="padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">🎉 Discount:</td><td style="text-align:right;padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;">- ${fmtMoney(totalDisc)}</td></tr>` : ''}
+  const totalDisc = Math.max(0, Math.round(
+    +(o.discount != null ? o.discount : ((o.manualDiscount||0) + (o.loyaltyDiscount||0))) || 0));
+  /* DISCOUNT — client: "kitna discount dia hai, customer ko proper details mil jayein".
+     Percent ho to % bhi, warna seedha amount. Label saaf "DISCOUNT". */
+  const manualPct = (o.discountType === 'percent' && +o.discountValue > 0)
+    ? +o.discountValue
+    : (o.subtotal > 0 && o.manualDiscount > 0 ? Math.round((+o.manualDiscount / +o.subtotal) * 1000) / 10 : 0);
+  const loyaltyPct = +(o.loyaltyPercent || 0);
+  const discountLines = (showDiscount && totalDisc > 0) ? `
+    ${o.manualDiscount>0 ? `<tr class="disc-row"><td style="padding:6px 0;font-size:${fontSize+1}px;font-weight:900;color:#000;">DISCOUNT${manualPct ? ` <span style="font-size:${fontSize-2}px;font-weight:800;">(${manualPct}% off)</span>` : ''}</td><td style="text-align:right;padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;white-space:nowrap;">− ${fmtMoney(o.manualDiscount)}</td></tr>` : ''}
+    ${o.loyaltyDiscount>0 ? `<tr class="disc-row"><td style="padding:6px 0;font-size:${fontSize+1}px;font-weight:900;color:#000;">LOYALTY DISCOUNT${loyaltyPct ? ` <span style="font-size:${fontSize-2}px;font-weight:800;">(${loyaltyPct}%)</span>` : ''}</td><td style="text-align:right;padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;white-space:nowrap;">− ${fmtMoney(o.loyaltyDiscount)}</td></tr>` : ''}
+    ${(!o.manualDiscount && !o.loyaltyDiscount) ? `<tr class="disc-row"><td style="padding:6px 0;font-size:${fontSize+1}px;font-weight:900;color:#000;">DISCOUNT</td><td style="text-align:right;padding:6px 0;font-size:${fontSize+2}px;font-weight:900;color:#000;white-space:nowrap;">− ${fmtMoney(totalDisc)}</td></tr>` : ''}
   ` : '';
 
   /* Pickup & delivery charges — always printed AFTER the discount, so the
@@ -281,63 +296,68 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
   return `
     <div class="invoice-page invoice-customer" style="max-width:100%;font-size:${fontSize}px;background:#fff;padding:10px;">
       ${logoBlock}
-      <div style="text-align:center;font-size:${fontSize}px;margin-bottom:12px;line-height:1.4;">
+      <div style="text-align:center;font-size:${fontSize}px;margin-bottom:8px;line-height:1.28;">
         ${showTagline && s.tagline ? '<b>'+escapeHtml(s.tagline)+'</b><br>':''}
         ${showAddress && s.address ? escapeHtml(s.address)+'<br>':''}
         ${showPhone && s.phone ? escapeHtml(s.phone):''}
       </div>
       
-      <div style="text-align:center;font-size:${narrow ? fontSize : fontSize+2}px;font-weight:900;margin:12px 0;letter-spacing:${narrow ? '0' : '1px'};color:#000;padding:6px 0;white-space:nowrap;border-top:2px dashed #000;border-bottom:2px dashed #000;">★ CUSTOMER COPY ★</div>
+      <div style="text-align:center;font-size:${narrow ? fontSize : fontSize+2}px;font-weight:900;margin:8px 0;letter-spacing:${narrow ? '0' : '1px'};color:#000;padding:4px 0;white-space:nowrap;border-top:2px dashed #000;border-bottom:2px dashed #000;">★ CUSTOMER COPY ★</div>
 
       <!-- INVOICE NO. — BARA, BOLD, CENTER (client ki requirement) -->
-      <div style="border:3px solid #000;border-radius:10px;padding:6px 6px 8px;margin:0 0 8px;text-align:center;background:#fff;">
+      <div style="border:3px solid #000;border-radius:10px;padding:4px 6px 6px;margin:0 0 6px;text-align:center;background:#fff;">
         <div style="font-size:${Math.max(9, fontSize-3)}px;font-weight:900;letter-spacing:2px;line-height:1.2;">INVOICE NO.</div>
         <div class="nw inv-big-no" style="font-size:${invoiceNoSize}px;font-weight:900;line-height:1.05;letter-spacing:1px;white-space:nowrap;">${invoiceNo}</div>
       </div>
 
       <!-- PIECES + PACKAGING — dono bare aur saaf -->
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
         ${showQtyCircle ? `
-          <div style="flex:1;border:3px solid #000;border-radius:10px;padding:4px 0 6px;text-align:center;background:#fff;">
+          <div style="flex:1;border:3px solid #000;border-radius:10px;padding:2px 0 4px;text-align:center;background:#fff;">
             <div style="font-size:${Math.max(8, fontSize-3)}px;font-weight:900;letter-spacing:1px;">PIECES</div>
             <div style="font-size:${piecesSize}px;font-weight:900;line-height:1.05;">${totalPcs}</div>
           </div>
         ` : ''}
         ${showDelType ? `
-          <div style="flex:1.2;border:3px solid #000;border-radius:10px;padding:4px 2px 6px;text-align:center;background:#fff;">
+          <div style="flex:1.2;border:3px solid #000;border-radius:10px;padding:2px 2px 4px;text-align:center;background:#fff;">
             <div style="font-size:${Math.max(8, fontSize-3)}px;font-weight:900;letter-spacing:1px;">PACKAGING</div>
             <div style="font-size:${packSize}px;font-weight:900;line-height:1.15;white-space:nowrap;">${delTypeInfo.label}</div>
           </div>
         ` : ''}
       </div>
 
-      <table class="kv" style="font-size:${fontSize+1}px;width:100%;border-collapse:collapse;margin-bottom:12px;line-height:1.5;">
-        <tr><td class="nw" style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Booking Date</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;">${fmtDate(o.createdAt)}</td></tr>
-        ${o.deliveryDate? `<tr><td class="nw" style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Delivery Date</td><td class="nw" style="text-align:right;padding:6px 0;border-top:1px dashed #000;color:#000;"><b>${escapeHtml(o.deliveryDate)}</b></td></tr>`:''}
-        ${showCashier ? `<tr><td class="nw" style="padding:6px 0;border-top:1px dashed #000;font-weight:bold;">Cashier</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;">${escapeHtml(cashier.name)}</td></tr>`:''}
-        <tr><td style="padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+2}px;font-weight:bold;">Customer</td><td style="text-align:right;padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+3}px;"><b>${escapeHtml(c.name)}</b></td></tr>
-        ${c.phone? `<tr><td style="padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+2}px;font-weight:bold;">Phone</td><td class="nw" style="text-align:right;padding:6px 0;border-top:1px dashed #000;font-size:${fontSize+3}px;"><b>${escapeHtml(c.phone)}</b></td></tr>`:''}
+      <!-- BOOKING / DELIVERY / CUSTOMER — saaf do-column rows (client: "kareeb kareeb
+           showing, thora adjust karo") -->
+      <table class="kv" style="font-size:${fontSize}px;width:100%;border-collapse:collapse;margin-bottom:9px;table-layout:fixed;line-height:1.4;">
+        <colgroup><col style="width:46%"><col style="width:54%"></colgroup>
+        <tr><td class="kv-l" style="padding:5px 0;border-top:1px dashed #000;font-weight:bold;">Booking Date</td><td class="kv-v nw" style="text-align:right;padding:5px 0;border-top:1px dashed #000;">${fmtDate(o.createdAt)}</td></tr>
+        ${o.deliveryDate? `<tr><td class="kv-l" style="padding:5px 0;border-top:1px dashed #000;font-weight:bold;">Delivery Date</td><td class="kv-v nw" style="text-align:right;padding:5px 0;border-top:1px dashed #000;"><b>${escapeHtml(o.deliveryDate)}</b></td></tr>`:''}
+        ${showCashier ? `<tr><td class="kv-l" style="padding:5px 0;border-top:1px dashed #000;font-weight:bold;">Cashier</td><td class="kv-v" style="text-align:right;padding:5px 0;border-top:1px dashed #000;">${escapeHtml(cashier.name)}</td></tr>`:''}
+        <tr><td class="kv-l" style="padding:5px 0;border-top:1px dashed #000;font-size:${fontSize+1}px;font-weight:900;">Customer</td><td class="kv-v" style="text-align:right;padding:5px 0;border-top:1px dashed #000;font-size:${fontSize+2}px;font-weight:900;">${escapeHtml(c.name)}</td></tr>
+        ${c.phone? `<tr><td class="kv-l" style="padding:5px 0;border-top:1px dashed #000;font-size:${fontSize+1}px;font-weight:900;">Phone</td><td class="kv-v nw" style="text-align:right;padding:5px 0;border-top:1px dashed #000;font-size:${fontSize+2}px;font-weight:900;">${escapeHtml(c.phone)}</td></tr>`:''}
       </table>
 
       ${showItems ? `
-        <table style="font-size:${fontSize+1}px;width:100%;border-collapse:collapse;margin-bottom:10px;line-height:1.5;">
+        <table class="items-tbl" style="font-size:${fontSize+1}px;width:100%;border-collapse:collapse;margin-bottom:10px;line-height:1.35;table-layout:fixed;">
+          <colgroup><col style="width:52%"><col style="width:16%"><col style="width:32%"></colgroup>
           <tr style="border-top:2px solid #000;border-bottom:2px solid #000;">
-            <td style="padding:8px 0;font-weight:900;font-size:${fontSize+2}px;">ITEMS</td>
-            <td style="text-align:right;padding:8px 0;font-weight:900;font-size:${fontSize+2}px;">TOTAL</td>
+            <td style="padding:5px 0;font-weight:900;font-size:${fontSize}px;">ITEM</td>
+            <td style="text-align:center;padding:5px 2px;font-weight:900;font-size:${fontSize}px;">QTY</td>
+            <td style="text-align:right;padding:5px 0;font-weight:900;font-size:${fontSize}px;">AMOUNT</td>
           </tr>
           ${itemsHtml}
         </table>
       ` : ''}
 
       <table style="font-size:${fontSize+2}px;width:100%;border-collapse:collapse;line-height:1.5;">
-        <tr style="border-top:2px solid #000;"><td style="padding:8px 0;font-weight:bold;">Gross Total</td><td style="text-align:right;padding:8px 0;font-weight:bold;font-size:${fontSize+4}px;">${fmtMoney(o.subtotal)}</td></tr>
+        <tr style="border-top:2px solid #000;"><td style="padding:6px 0;font-weight:bold;">Gross Total</td><td style="text-align:right;padding:6px 0;font-weight:bold;font-size:${fontSize+3}px;">${fmtMoney(o.subtotal)}</td></tr>
         ${discountLines}
         ${+(o.prevBalance||0) > 0 ? `<tr><td style="padding:6px 0;font-weight:bold;">Purana Baqi <span style="font-weight:400;font-size:${fontSize-1}px;">(prev. balance)</span></td><td style="text-align:right;padding:6px 0;font-weight:bold;">+ ${fmtMoney(o.prevBalance)}</td></tr>` : ''}
         ${o.tax>0?`<tr><td style="padding:6px 0;">Tax</td><td style="text-align:right;padding:6px 0;">${fmtMoney(o.tax)}</td></tr>`:''}
         ${chargeLine(fontSize)}
-        ${(totalDisc>0 || charge > 0)?`<tr style="border-top:1px dashed #000;"><td style="padding:8px 0;font-weight:900;font-size:${fontSize+4}px;">NET TOTAL</td><td style="text-align:right;padding:8px 0;font-weight:900;font-size:${fontSize+6}px;white-space:nowrap;">${fmtMoney(o.total)}</td></tr>`:''}
+        ${(totalDisc>0 || charge > 0)?`<tr class="net-row" style="border-top:2px solid #000;"><td style="padding:6px 0;font-weight:900;font-size:${fontSize+3}px;">NET TOTAL</td><td style="text-align:right;padding:6px 0;font-weight:900;font-size:${fontSize+5}px;white-space:nowrap;">${fmtMoney(o.total)}</td></tr>`:''}
         <tr><td style="padding:6px 0;">Paid</td><td style="text-align:right;padding:6px 0;">${fmtMoney(o.paid)}</td></tr>
-        ${o.due>0?`<tr><td style="padding:8px 0;font-size:${fontSize+4}px;font-weight:900;"><b class="nw" style="color:#000;">Payment Due</b></td><td style="text-align:right;padding:8px 0;font-size:${fontSize+4}px;"><b style="color:#000;font-weight:900;">${fmtMoney(o.due)}</b></td></tr>`:''}
+        ${o.due>0?`<tr><td style="padding:6px 0;font-size:${fontSize+4}px;font-weight:900;"><b class="nw" style="color:#000;">Payment Due</b></td><td style="text-align:right;padding:6px 0;font-size:${fontSize+4}px;"><b style="color:#000;font-weight:900;">${fmtMoney(o.due)}</b></td></tr>`:''}
         ${o.due==0 && totalDisc==0?`<tr><td style="padding:8px 0;font-size:${fontSize+4}px;font-weight:900;"><b class="nw" style="color:#000;">Payment</b></td><td style="text-align:right;padding:8px 0;font-size:${fontSize+4}px;"><b style="color:#000;font-weight:900;">${fmtMoney(o.total)}</b></td></tr>`:''}
       </table>
 
@@ -351,8 +371,8 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
         }
         const head = lines.find(l => !/^\d+[.)]\s/.test(l)) || 'TERMS & CONDITIONS';
         const items = lines.filter(l => /^\d+[.)]\s/.test(l));
-        return `<div class="inv-terms" style="margin-top:14px;padding-top:10px;border-top:2px dashed #000;">
-          <div class="inv-terms-head" style="text-align:center;font-weight:900;font-size:${fontSize}px;letter-spacing:.6px;margin-bottom:6px;">${escapeHtml(head)}</div>
+        return `<div class="inv-terms" style="margin-top:10px;padding-top:7px;border-top:2px dashed #000;">
+          <div class="inv-terms-head" style="text-align:center;font-weight:900;font-size:${fontSize}px;letter-spacing:.6px;margin-bottom:4px;">${escapeHtml(head)}</div>
           <div class="inv-terms-body" style="font-size:${Math.max(7, fontSize-2)}px;line-height:1.42;">
             ${items.map(t => `<div style="margin-bottom:2.5px;"><b>${escapeHtml(t.match(/^\d+/)[0])}.</b> ${escapeHtml(t.replace(/^\d+[.)]\s*/, ''))}</div>`).join('')}
           </div>
@@ -360,8 +380,8 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
       })() : ''}
       
       ${showQR ? `<div style="text-align:center;margin-top:20px;"><canvas class="invQR"></canvas></div>` : ''}
-            ${showFooter && s.shopTimingText ? `<div class="block-wide" style="text-align:center;font-size:${Math.max(7, fontSize-2)}px;font-weight:700;margin-top:9px;padding-top:7px;border-top:1px dashed #000;white-space:pre-wrap;line-height:1.35;">${escapeHtml(s.shopTimingText)}</div>` : ''}
-      ${showFooter ? `<div style="text-align:center;font-size:${fontSize+2}px;font-weight:900;margin-top:16px;">${escapeHtml(s.invoiceFooter || '')}</div>` : ''}
+            ${showFooter && s.shopTimingText ? `<div class="block-wide inv-timings" style="text-align:center;font-size:${Math.max(7, fontSize-3)}px;font-weight:700;margin-top:8px;padding-top:6px;border-top:1px dashed #000;white-space:pre-wrap;line-height:1.3;">${escapeHtml(s.shopTimingText)}</div>` : ''}
+      ${showFooter ? `<div style="text-align:center;font-size:${fontSize+2}px;font-weight:900;margin-top:10px;">${escapeHtml(s.invoiceFooter || '')}</div>` : ''}
       ${buildDeveloperCredit(s)}
     </div>
   `;
