@@ -465,6 +465,7 @@ img {
 /* === PAPER EDGE SAFETY === */
 html, body, #printArea, #printArea * {
   max-width: 100% !important;
+  box-sizing: border-box !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
   white-space: normal !important;
@@ -479,6 +480,8 @@ table td:last-child,  table th:last-child  { width: 54% !important; }
 .invoice-office table td:last-child,  .invoice-office table th:last-child { width: auto !important; }
 .invoice-office table.kv td:first-child { width: 36% !important; }
 .invoice-office table.kv td:last-child  { width: 64% !important; }
+/* Labels (.nw class) pehle se nowrap hain — poore cell par nowrap nahi,
+   warna lamba customer naam ya amount cut ho jata hai. */
 /* Jo cheez tootni nahi chahiye (invoice no, phone, tareekh, amount) */
 #printArea .nw, .invoice-page .nw { white-space: nowrap !important; word-break: keep-all !important; }
 /* Poori chaurai wale blocks (terms / timings / credit) — table width rules inhein na chhuein */
@@ -493,10 +496,22 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
 .print-slip:last-child { page-break-after: auto; break-after: auto; }
 .print-page-break { page-break-after: always; break-after: page; height: 0; }
 
+/* ===== PRINT SIZE CONTROL (client: "print bohat chhota aa raha hai") =====
+   Store ki image 600px+ chaudi hoti hai, is liye Chrome usay shrink kar deta tha
+   aur print chhota aata tha. Screen par bhi slips ka sahi print size dikhate hain
+   taake ghalat-fehmi na ho. */
+@media screen {
+  .print-slip, .invoice-page { font-size: 11px; }
+  .invoice-page .inv-big-no { font-size: 26px !important; }
+}
+
 @media print {
   /* Chrome ke "Default" margins ko 0 karna: @page margin 0 se Chrome khud
      Margins = Default par 0 le leta hai (client ke yahan "Default" 12mm tha). */
-  @page { size: ${rawPaperMm || paper}mm auto; margin: 0 !important; }
+  /* ⚠️ PEHLE "size: 80mm auto" tha — Chrome is ko theek se handle nahi karta aur
+     "3 sheets of paper" bana deta tha. Aur "594mm" (do copy ek page) print dialog me
+     ghair-mamooli paper dikhata tha. Ab: HAR COPY = 297mm (ek roll page). */
+  @page { size: ${rawPaperMm || paper}mm 297mm; margin: 0 !important; }
 
   /* === COMPACT RECEIPT ===
      Thermal roll par kaghaz bachane + text bara dikhane ke liye spacing tight:
@@ -517,23 +532,76 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .inv-logo { max-height: 16mm !important; }
   hr { margin: 3px 0 !important; }
 
-  /* === ONE PAGE RULE (client: "invoice chaye kitni bhi bhari ho, page 1 par hi hogi") ===
-     Har slip ek hi page par; andar ka content khud squeeze hota hai — text chhota hota hai,
-     kuch bahar nahi jata. CUT page ke aakhir par hi hota hai (office copy alag page). */
+  /* === ONE PAGE RULE ===
+     Client ka masla: print par wohi invoice 30+ dafa aa raha tha (33 page).
+     Wajah: page-break-after + absolute positioning + content page se lamba.
+     Ab DETERMINISTIC: har slip ki FIXED height 297mm (= ek roll page), andar fit
+     kar diya jata hai. Pagination khud hoti hai — koi forced break nahi. */
+  #printArea, #printArea * { position: static !important; }
   .print-slip, .invoice-page {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     page-break-after: auto !important;
     break-after: auto !important;
+    position: relative !important;
   }
   .print-slip {
+    display: block !important;
+    width: 100% !important;
+    /* ⚠️ FIXED height (297mm) NAHI — content ke mutabiq natural height.
+       Warna slip se lamba content (15 items + terms) cut ho jata tha. */
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    break-after: page !important;         /* har copy apni page par (= 2 pages, 33 nahi) */
     page-break-after: always !important;
-    break-after: page !important;
   }
   .print-slip:last-child {
-    page-break-after: auto !important;
     break-after: auto !important;
+    page-break-after: auto !important;
   }
+  /* === COMPACT MODE — 3 darje ===
+     Jitna zaroori ho utna hi tight karo; font jitna bara mumkin ho.
+     fitSlipsToPage() khud level chunta hai (cmp1 → cmp2 → cmp3 → phir font). */
+  .print-slip.cmp1 .invoice-page { line-height: 1.2 !important; padding: 2px !important; }
+  .print-slip.cmp1 .invoice-page table td,
+  .print-slip.cmp1 .invoice-page table th { padding: 1px 0 !important; }
+  .print-slip.cmp1 .invoice-page table { line-height: 1.24 !important; }
+  .print-slip.cmp1 .inv-logo { max-height: 12mm !important; }
+  .print-slip.cmp1 hr { margin: 2px 0 !important; }
+  .print-slip.cmp1 .inv-terms { margin-top: 4px !important; padding-top: 3px !important; }
+  .print-slip.cmp1 .inv-terms-body > div { margin-bottom: 0 !important; }
+  .print-slip.cmp1 .dev-credit { margin-top: 4px !important; padding-top: 3px !important; }
+
+  .print-slip.cmp2 .invoice-page table td,
+  .print-slip.cmp2 .invoice-page table th { padding: 0 !important; }
+  .print-slip.cmp2 .invoice-page table { line-height: 1.16 !important; }
+  .print-slip.cmp2 .inv-logo { max-height: 10mm !important; }
+  .print-slip.cmp2 .inv-terms { margin-top: 3px !important; padding-top: 2px !important; }
+  .print-slip.cmp2 .inv-terms-head { font-size: 7.6px !important; margin-bottom: 2px !important; }
+  .print-slip.cmp2 .inv-terms-body { font-size: 6.8px !important; line-height: 1.16 !important; }
+  .print-slip.cmp2 .block-wide { font-size: 6.8px !important; line-height: 1.16 !important; }
+  .print-slip.cmp2 .dev-credit { margin-top: 3px !important; padding-top: 2px !important; font-size: 7px !important; }
+  .print-slip.cmp2 .dev-credit img { max-height: 7mm !important; }
+
+  .print-slip.cmp3 .inv-terms-body { font-size: 6.1px !important; line-height: 1.12 !important; }
+  .print-slip.cmp3 .inv-terms-head { font-size: 7.2px !important; }
+  .print-slip.cmp3 .block-wide { font-size: 6.2px !important; line-height: 1.12 !important; }
+  .print-slip.cmp3 .inv-logo { max-height: 8mm !important; }
+  .print-slip.cmp3 .dev-credit { font-size: 6.4px !important; }
+  .print-slip.cmp3 .invoice-page table { line-height: 1.12 !important; }
+
+  /* Slip ke andar ka receipt natural flow me — ek hi andar page break */
+  .print-slip .invoice-page {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+  .print-page-break { display: none !important; height: 0 !important; }
   /* lambe items/terms: line-height thora aur tight */
   .invoice-page table { line-height: 1.22 !important; }
   .invoice-page > div { margin-top: 2px !important; margin-bottom: 2px !important; }
@@ -548,7 +616,11 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   /* Developer credit: compact */
   .dev-credit { margin-top: 5px !important; padding-top: 4px !important; }
   .dev-credit img { max-height: 9mm !important; width: auto !important; }
-  html { width: ${paper === '58' ? '58mm' : '80mm'} !important; max-width: ${paper === '58' ? '58mm' : '80mm'} !important; }
+  /* ⚠️ html ki width bhi ASLI paper ke barabar honi chahiye. Pehle html 80mm aur
+     body 72mm thi — Chrome 8mm overflow ko shrink kar ke poora print chhota kar deta
+     tha aur right side cut ho jati thi. */
+  html { width: ${rawPaperMm ? rawPaperMm + 'mm' : (paper === '58' ? '58mm' : '80mm')} !important;
+         max-width: ${rawPaperMm ? rawPaperMm + 'mm' : (paper === '58' ? '58mm' : '80mm')} !important; }
   body {
     width: ${rawPaperMm ? rawPaperMm + 'mm' : (paper === '58' ? '58mm' : '80mm')} !important;
     max-width: ${rawPaperMm ? rawPaperMm + 'mm' : (paper === '58' ? '58mm' : '80mm')} !important;
@@ -568,37 +640,101 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   /* ---------- iframe-based printing (popup-free) ---------- */
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
-  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+  /* ⚠️ PEHLE width:0 tha — is liye naap ke waqt har line toot jati thi, height 3-4 guna
+     ban jati thi aur auto-fit invoice ko 42% tak chhota kar deta tha (client ka masla:
+     "print bohat chhota aa raha hai"). Ab iframe ko ASLI paper ki chaurai dete hain. */
+  const _frameMm = rawPaperMm || (paper === '58' ? 58 : 80);
+  frame.style.cssText = 'position:fixed;left:-10000px;top:0;'
+    + 'width:' + _frameMm + 'mm;height:297mm;border:0;visibility:hidden;opacity:0;pointer-events:none;';
   document.body.appendChild(frame);
 
   const cleanup = () => {
     try { frame.remove(); } catch (e) {}
   };
-  /* === AUTO-FIT: "invoice bhari ho phir bhi page 1 par" ===
-     Slip ki asli height naapo; page (roll) ki height se zyada ho to zoom chhota kar do.
-     Text chhota hota hai magar kuch bhi page 2 par nahi jata. */
+  /* === EK PAGE PAR POORI INVOICE (bina chhotapan) ===
+     Client ka masla: (a) wohi invoice 30+ dafa print, (b) print bohat chhota.
+     Hal: print HAMESHA 100% par (koi transform/scale nahi — isi se chhotapan aata tha).
+     Har copy apni page par (print-page-break par natural pagination = 2 pages).
+     Sirf agar invoice EK roll page se lambi ho (bohat items), to font halka sa
+     chhota hota hai — 100% se 85% tak, us se neeche kabhi nahi. */
   const fitSlipsToPage = () => {
     try {
       const doc2 = frame.contentWindow.document;
       const st = (typeof DB !== 'undefined' && DB.settings) ? DB.settings() : {};
-      const pageMm = +(st.invoicePaperHeightMm) || 297;
       const MM2PX = 96 / 25.4;
-      /* 10mm safety: printer ka non-printable area + rounding */
-      const targetPx = (pageMm - 10) * MM2PX;
-      doc2.querySelectorAll('.print-slip').forEach(slip => {
-        /* reset */
-        slip.style.transform = '';
-        slip.style.width = '';
-        slip.style.transformOrigin = '';
-        const naturalH = slip.getBoundingClientRect().height;
-        if (!naturalH || naturalH <= targetPx) return;
-        /* scale DOWN: width ko ulta barha kar scale karte hain — line wrapping waisi hi rehti hai,
-           sirf print size chhota hota hai. Is tarah poora invoice EK page par aa jata hai. */
-        const z = Math.max(0.42, Math.min(1, (targetPx / naturalH) * 0.99));
-        slip.style.transformOrigin = 'top left';
-        slip.style.transform = `scale(${Math.floor(z * 1000) / 1000})`;
-        slip.style.width = (100 / z).toFixed(3) + '%';
-      });    } catch (e) { console.warn('[print] auto-fit skip', e); }
+      const targetPx = (297 - 8) * MM2PX;            /* page 297mm − 8mm safety */
+      const mode = (st.printSizeMode || 'normal');
+      const slips = Array.from(doc2.querySelectorAll('.print-slip'));
+      if (!slips.length) return;
+
+      /* har element ka ASLI font size yaad rakho (ek dafa) */
+      const remember = (root) => {
+        if (root.dataset.fsBase) return;
+        root.dataset.fsBase = String(parseFloat(getComputedStyle(root).fontSize) || 13);
+        root.querySelectorAll('[style*="font-size"]').forEach(el => {
+          if (el.dataset.fsOrig) return;
+          const m = /font-size:\s*([\d.]+)px/.exec(el.getAttribute('style') || '');
+          if (m) el.dataset.fsOrig = m[1];
+        });
+      };
+      const applyK = (root, k) => {
+        const base = +root.dataset.fsBase || 13;
+        root.style.fontSize = (Math.round(base * k * 100) / 100) + 'px';
+        root.querySelectorAll('[data-fs-orig]').forEach(el => {
+          el.style.fontSize = Math.max(6, Math.round(+el.dataset.fsOrig * k * 100) / 100) + 'px';
+        });
+      };
+      const tallestPx = () => {
+        let t = 0;
+        slips.forEach(s => {
+          const inner = s.querySelector('.invoice-page') || s;
+          t = Math.max(t, inner.scrollHeight || inner.getBoundingClientRect().height || 0);
+        });
+        return t;
+      };
+
+      slips.forEach(s => {
+        const inner = s.querySelector('.invoice-page') || s;
+        remember(inner);
+      });
+
+      if (mode === 'large') {                        /* Bara mode: 100%, chhota nahi */
+        slips.forEach(s => { const i = s.querySelector('.invoice-page') || s; applyK(i, 1); s.dataset.fitScale = '1'; });
+        window.__printFitPct = 100;
+        return;
+      }
+
+      /* Darje-ba-darje: 100% normal → halka compact → tight → very tight,
+         aur sirf aakhir me font chhota (100% → 70% se neeche kabhi nahi). */
+      const setLevel = (lvl) => {
+        slips.forEach(s => {
+          s.classList.remove('cmp1', 'cmp2', 'cmp3');
+          if (lvl >= 1) s.classList.add('cmp1');
+          if (lvl >= 2) s.classList.add('cmp2');
+          if (lvl >= 3) s.classList.add('cmp3');
+        });
+      };
+      const tryLevel = (level, scale) => {
+        setLevel(level);
+        slips.forEach(s => { const inner = s.querySelector('.invoice-page') || s; applyK(inner, scale); });
+        return tallestPx() <= targetPx;
+      };
+      let k = 1, lvl = 0;
+      if (tryLevel(0, 1)) { lvl = 0; k = 1; }
+      else if (tryLevel(1, 1)) { lvl = 1; k = 1; }
+      else if (tryLevel(2, 1)) { lvl = 2; k = 1; }
+      else if (tryLevel(3, 1)) { lvl = 3; k = 1; }
+      else {
+        lvl = 3; k = 1;
+        for (let i = 0; i < 10; i++) {
+          k = Math.round((k - 0.03) * 100) / 100;
+          if (k < 0.7) k = 0.7;
+          if (tryLevel(3, k) || k <= 0.7) break;
+        }
+      }
+      slips.forEach(s => { s.dataset.fitScale = String(k); });
+      window.__printFitPct = Math.round(k * 100);
+    } catch (e) { console.warn('[print] fit skip', e); }
   };
 
   const triggerPrint = () => {
@@ -607,6 +743,8 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
       const fw = frame.contentWindow;
       fw.focus();
       fw.print();
+      /* ⚠️ Scale print ke DOURAN lagaa rehna chahiye — fit isi se hota hai.
+         (Pehle 1.2s baad reset ho jata tha, is liye print chhota/adhoora aata tha.) */
     } catch (e) {
       console.warn('[print] iframe print failed, trying popup fallback', e);
       const win = window.open('', '_blank', 'width=420,height=700');

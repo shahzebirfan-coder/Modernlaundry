@@ -203,6 +203,17 @@ function renderSettings() {
               80mm roll par aksar printer sirf <b>72mm</b> tak print karta hai. Agar kinare kat rahe hon to value kam karein (70 → 68).
             </small>
           </div>
+          <div style="margin-bottom:10px;padding:10px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;">
+            <label style="font-size:12px;font-weight:800;display:block;margin-bottom:6px;">🔠 Print ka size (chhota aaye to yahan se badayein)</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-sm ${(s.printSizeMode||'normal')==='normal' ? 'btn-primary' : 'btn-secondary'}" data-size="normal">Normal (auto-fit, 1 page)</button>
+              <button class="btn btn-sm ${(s.printSizeMode||'normal')==='large' ? 'btn-primary' : 'btn-secondary'}" data-size="large">Bara (100% — bilkul chhota nahi)</button>
+            </div>
+            <small style="display:block;color:var(--text-soft);font-size:11px;margin-top:6px;">
+              <b>Normal:</b> invoice chhoti kar ke ek hi page par fit hoti hai.<br>
+              <b>Bara:</b> text 100% size par (sab se parhne ke qabil) — content zyada ho to doosri page par ja sakta hai.
+            </small>
+          </div>
           <button class="btn btn-secondary btn-block" id="resetPrintBtn" style="margin-bottom:8px;">↺ Reset to Recommended (80mm · 70% logo · 20mm)</button>
           <button class="btn btn-ghost btn-block" id="wideLogoBtn" style="margin-bottom:8px;">↔ Wider Logo (70% · 26mm tall)</button>
           <small style="color:var(--text-soft);font-size:11px;display:block;line-height:1.6;">
@@ -477,6 +488,14 @@ function renderSettings() {
     toast('✅ Paper width ' + mm + 'mm set ho gayi — ab test print karein', 'success');
     if (typeof renderSettings === 'function') renderSettings();
   };
+  document.querySelectorAll('[data-size]').forEach(b => {
+    b.onclick = () => {
+      DB.saveSettings({ printSizeMode: b.dataset.size });
+      toast(b.dataset.size === 'large' ? '✅ Bara print (100%) — ab bilkul chhota nahi banega' : '✅ Normal print (auto-fit)', 'success');
+      app.go('settings');
+    };
+  });
+
   if ($('#resetPrintBtn')) $('#resetPrintBtn').onclick = () => {
     confirmDialog('Apply the recommended thermal print setup?<br><br><b>80mm paper · logo 70% width · max 20mm tall · 2mm margin · crisp 1-bit logo</b><br><br>You can fine-tune it any time in the Invoice Customizer.', () => {
       DB.saveSettings({
