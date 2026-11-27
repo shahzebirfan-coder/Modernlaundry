@@ -1466,3 +1466,34 @@ Customer + office = 2 pages. Cut line hamesha page 1 par credit ke foran baad.
 
 `tprintpages.js` ab **32 ✓**. Sab 16 suites + recovery green.
 Version: `?v=20261124.7`, sw `modern-dry-cleaners-pos-v62`.
+
+### 20.4 POS Rozana Items + Purana Baqi (`?v=20261124.8` / sw `v63`)
+
+Client ke 4 points (round 3):
+
+| # | Client ne kaha | Kya bana |
+|---|---|---|
+| 1 | "daily use items (Shalwar Suit, Open Shirt, Dress Pant, Bedsheet) ek side baar par — ek click me cart" | POS ki **left rail `⭐ Rozana Items`** — 12 default items, ek tap = cart me |
+| 2 | "side bar bohat chota hai — bada, mota karo, naya colour" | Sidebar **250 → 280px**, dark navy gradient, bara logo (104px), mota text (14.5px / 800) |
+| 3 | "New Customer me column — cashier purana baqi enter kar sake" | Customer form me **Purana Baqi (Rs.) + Note** box; list me **`Baqi`** column |
+| 4 | "invoice/customer pick par RED alert — client ko inform karo" | Cart + booking form me **RED alert** (breakdown: register baqi + pichli invoices) |
+
+**Rozana Items rail (naya):**
+- Data: `DB.quickPicks` table `{ id:'qp_<productId>', productId, sort, createdAt }`; defaults `QUICK_PICK_DEFAULTS` (Shalwar Suit, Open Shirt, Dress Pant, Suit 2/3 Pcs, Kurta, Coat, Bedsheet Double/Single, Blanket Double, Dupatta, Shalwar Suit (Press)).
+- One-time seed `settings._quickPicksV = 1` — cashier list khud badle to dobara seed **nahi** hogi.
+- Item par **qty badge** + `in-cart` green highlight; tap = `addToCart()` + click sound.
+- **✏️ editor**: searchable checkbox list (`#qpList` rail ke head par).
+- Product tile par **⭐ button** = `DB.toggleQuickPick()` (add/remove, ek click).
+- Layout: `.pos-layout` **3 columns** — `200px | 1fr | 360–420px` (1500px+ par `230px`, 1280px par `160px`, tablet/mobile par horizontal strip).
+
+**Purana Baqi:**
+- Field: `customer.openingBalance` (Rs.) + `customer.openingNote` — **naya customer banate waqt** hi record (purana register/paper).
+- Total baqi = `openingBalance` + us ke orders ka `due` (cancelled orders chhor kar) — `customerOpenBalance()`.
+- **RED alert** `#prevBalAlert` cart me: naam, total, breakdown (`register: Rs. X • pichli invoices: Rs. Y`), **➕ Invoice me shamil karein** / **Is dafa nahi**.
+- Booking modal me bhi wahi red block (`#prevBalBanner`), customer milte hi auto dikhta hai.
+- Customers page: **`Baqi`** column (red) + order history modal me top par purana baqi + note.
+- Jahan `prevBalance` invoice me add ho jaye, grand total me shamil hota hai (discount sirf current bill par lagta hai).
+
+**Tests:** `tquickpicks.js` (**29 ✓**), `topeningbal.js` (**26 ✓**), `tprevbal.js` 9 ✓. Sab 18 suites + recovery green.
+
+Version: `?v=20261124.8`, sw `modern-dry-cleaners-pos-v63`.
