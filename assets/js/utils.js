@@ -613,6 +613,25 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .inv-terms-head { font-size: 8.6px !important; margin-bottom: 4px !important; }
   .inv-terms-body { font-size: 7.2px !important; line-height: 1.36 !important; }
   .inv-terms-body > div { margin-bottom: 1px !important; }
+  /* === CUT LINE (client: "credit ke baad foran cut aana chahiye") ===
+     Sirf PRINT par — customer PDF / WhatsApp copy me nahi.
+     Har copy (customer + office) ke credit ke neeche dashed cut line, taake
+     roll wahin se kaata jaye. Content ke saath hi naapta hai (extra page nahi). */
+  .print-slip .dev-credit::after {
+    content: "✂  - - -  CUT HERE  - - -  ✂";
+    display: block !important;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .6px;
+    color: #000;
+    margin-top: 7px;
+    padding-top: 4px;
+    border-bottom: 2px dashed #000;
+    padding-bottom: 6px;
+    white-space: nowrap;
+  }
+
   /* Developer credit: compact */
   .dev-credit { margin-top: 5px !important; padding-top: 4px !important; }
   .dev-credit img { max-height: 9mm !important; width: auto !important; }
