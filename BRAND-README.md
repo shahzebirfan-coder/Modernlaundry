@@ -1431,3 +1431,38 @@ Naap (asli 72mm roll): 3 items → 1 page 275mm · 5 items → L4 · 8 items →
 
 `tprintpages.js` ab **28 ✓** (naye 7 asserts). Sab 16 suites + recovery green.
 Version: `?v=20261124.6`, sw `modern-dry-cleaners-pos-v61`.
+
+### 20.3 Bara logo + readable Terms (`?v=20261124.7` / sw `v62`)
+
+Client: *"logo abi aur big karo"* + *"terms & conditions bohat choti aari hain — due amount jitni readable ho"*.
+
+**Logo (aur bara):**
+- `invoiceLogoSize` 100% (poori roll chaurai), `invoiceLogoMaxMm` **32 → 45mm**, migration `_logoBigV = 2`.
+- Print caps: base **56mm**, cmp1 **46**, cmp2 **38**, cmp3 **30**, cmp4 **20mm**.
+- Header ki 4 lines (tagline/address/phone) 13px → **9.6px** — jagah logo ko di.
+
+**TERMS (readable):**
+| Level | Pehle | Ab |
+|---|---|---|
+| base | 7.2px | **10.5px bold** |
+| cmp2 | 6.8 | 9.6 |
+| cmp3 | 6.1 | 9.2 |
+| cmp4 | 5.7 | **9.4** |
+
+Rows ka gap 2px → 1px (jagah bachti hai, size barhta hai).
+
+**Jagah kahan se aayi (layout saaf kiya):**
+- `★ CUSTOMER COPY ★` band ab INVOICE box ke andar (pehle alag full-width band tha — ~10mm bachta hai).
+- Item ka rate `@ Rs. x` chhote inline (pehle `@ Rs. x` alag line leta tha).
+- Timings ab `invoiceShowFooter` se ALAG (`s.shopTimingText`) — thank-you band karne se timings nahi jaati.
+- `.inv-head`, `.inv-footer`, `.inv-timings`, `.inv-no-box` classes — print par sab control me.
+
+**Naap (asli 72mm roll, `cmp4` = sab se compact level):**
+```
+3 items (aap ka INV-078)          → 1 page  293 mm   100% font
+2 items (chhoti invoice)          → 1 page  281 mm   100% font
+```
+Customer + office = 2 pages. Cut line hamesha page 1 par credit ke foran baad.
+
+`tprintpages.js` ab **32 ✓**. Sab 16 suites + recovery green.
+Version: `?v=20261124.7`, sw `modern-dry-cleaners-pos-v62`.

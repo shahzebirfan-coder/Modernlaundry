@@ -1,7 +1,7 @@
 ========================================================================
    MODERN DRY CLEANERS  —  PRINT FIX
    "Bhoar sari invoice ek saath" + size ka masla — HAL HO GAYA
-   Version: ?v=20261124.6      Service worker: pos-v61
+   Version: ?v=20261124.7      Service worker: pos-v62
 ========================================================================
 
 AAP KA MASLA
@@ -88,6 +88,25 @@ NAYI INVOICE LAYOUT (aap ki requests)
 NOTE: Page 1 par sab kuch aata hai — logo, invoice no., PIECES, packaging,
 dates, customer, items (item/qty/amount), totals + discount, terms, timings,
 credit aur uske foran baad CUT LINE. Page 2 = OFFICE COPY (isi tarah).
+
+
+LOGO AUR TERMS (nayi tabdeeli)
+------------------------------
+* BRAND LOGO: pehle se bhi BARA — ab poori roll chaurai (72mm) aur height
+  cap 45mm (print par 56mm tak). Har invoice par saaf nazar aata hai.
+
+* TERMS & CONDITIONS: pehle bohat choti thi (7px). Ab **10.5px bold** —
+  bilkul "Payment Due" jaisi saaf parhi jati hai. Bhaari invoice par bhi
+  sab se chhota size 9.4px se neeche nahi jata (pehle 5.7px tha).
+
+* Jagah kahan se aayi (taake sab ek page par rahe):
+    - "CUSTOMER COPY" ab INVOICE NO. ke box ke andar (alag band khatam).
+    - Item ka rate "@ Rs. 160" chhote mein naam ke sath.
+    - Logo ke neeche tagline/address/phone ki lines chhoti (9.6px).
+    - Thank-you line halki chhoti.
+
+* NOTE: Agar aap Settings -> Invoice me "Thank you" line band karein to bhi
+  SHOP TIMINGS aur TERMS invoice par aate rahenge (dono alag settings hain).
 
 PRINT KARNE KA TAREEQA (yeh na badlein)
 ---------------------------------------
