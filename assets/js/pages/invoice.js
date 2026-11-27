@@ -175,7 +175,7 @@ function buildInvoiceLogo(s, width, fontSize) {
 
   /* Client: "logo big karo, bohat chota hai". Thermal logo ki mm width ab
      slip ki poori chaurai (72mm) tak — print CSS me sirf 40mm ka cap hai. */
-  const printCap = Math.max(20, +s.invoiceLogoMaxMm || 32);
+  const printCap = Math.max(20, +s.invoiceLogoMaxMm || 45);
   const widthCss = (isThermal && wMm)
     ? `width:${wMm}mm;max-width:${wMm}mm;`
     : `max-width:${Math.min(200, width * 0.6)}px;`;
@@ -261,7 +261,7 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
      Rate qty ke neeche chhote mein (customer ko rate bhi pata rahe). */
   const itemsHtml = (o.items || []).map(it => `
     <tr>
-      <td class="it-name" style="padding:4px 0;font-size:${fontSize}px;font-weight:bold;line-height:1.2;">${escapeHtml(it.name)}<br><span style="font-size:${Math.max(8, fontSize-3)}px;font-weight:normal;white-space:nowrap;">@ ${fmtMoney(it.price)}</span></td>
+      <td class="it-name" style="padding:4px 0;font-size:${fontSize}px;font-weight:bold;line-height:1.2;">${escapeHtml(it.name)} <span class="it-rate" style="font-size:${Math.max(8, fontSize-4)}px;font-weight:normal;white-space:nowrap;">@ ${fmtMoney(it.price)}</span></td>
       <td class="it-qty" style="text-align:center;padding:4px 2px;font-size:${fontSize+1}px;font-weight:900;">${it.qty}</td>
       <td class="it-amt" style="text-align:right;padding:4px 0;font-size:${fontSize+1}px;font-weight:bold;white-space:nowrap;">${fmtMoney(it.qty*it.price)}</td>
     </tr>
@@ -296,16 +296,15 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
   return `
     <div class="invoice-page invoice-customer" style="max-width:100%;font-size:${fontSize}px;background:#fff;padding:10px;">
       ${logoBlock}
-      <div style="text-align:center;font-size:${fontSize}px;margin-bottom:8px;line-height:1.28;">
+      <div class="inv-head" style="text-align:center;font-size:${Math.max(9, fontSize-3)}px;margin-bottom:5px;line-height:1.22;">
         ${showTagline && s.tagline ? '<b>'+escapeHtml(s.tagline)+'</b><br>':''}
         ${showAddress && s.address ? escapeHtml(s.address)+'<br>':''}
         ${showPhone && s.phone ? escapeHtml(s.phone):''}
       </div>
       
-      <div style="text-align:center;font-size:${narrow ? fontSize : fontSize+2}px;font-weight:900;margin:8px 0;letter-spacing:${narrow ? '0' : '1px'};color:#000;padding:4px 0;white-space:nowrap;border-top:2px dashed #000;border-bottom:2px dashed #000;">★ CUSTOMER COPY ★</div>
-
-      <!-- INVOICE NO. — BARA, BOLD, CENTER (client ki requirement) -->
-      <div style="border:3px solid #000;border-radius:10px;padding:4px 6px 6px;margin:0 0 6px;text-align:center;background:#fff;">
+      <!-- INVOICE NO. — BARA, BOLD, CENTER + copy ka label isi box me (jagah bachti hai) -->
+      <div class="inv-no-box" style="border:3px solid #000;border-radius:10px;padding:3px 6px 6px;margin:4px 0 6px;text-align:center;background:#fff;">
+        <div style="font-size:${Math.max(9, fontSize-3)}px;font-weight:900;letter-spacing:1.2px;line-height:1.2;border-bottom:2px dashed #000;padding-bottom:2px;margin-bottom:2px;">★ CUSTOMER COPY ★</div>
         <div style="font-size:${Math.max(9, fontSize-3)}px;font-weight:900;letter-spacing:2px;line-height:1.2;">INVOICE NO.</div>
         <div class="nw inv-big-no" style="font-size:${invoiceNoSize}px;font-weight:900;line-height:1.05;letter-spacing:1px;white-space:nowrap;">${invoiceNo}</div>
       </div>
@@ -380,8 +379,8 @@ function buildCustomerSlip(o, c, cashier, s, invoiceNo, totalPcs, delTypeInfo) {
       })() : ''}
       
       ${showQR ? `<div style="text-align:center;margin-top:20px;"><canvas class="invQR"></canvas></div>` : ''}
-            ${showFooter && s.shopTimingText ? `<div class="block-wide inv-timings" style="text-align:center;font-size:${Math.max(7, fontSize-3)}px;font-weight:700;margin-top:8px;padding-top:6px;border-top:1px dashed #000;white-space:pre-wrap;line-height:1.3;">${escapeHtml(s.shopTimingText)}</div>` : ''}
-      ${showFooter ? `<div style="text-align:center;font-size:${fontSize+2}px;font-weight:900;margin-top:10px;">${escapeHtml(s.invoiceFooter || '')}</div>` : ''}
+            ${s.shopTimingText ? `<div class="block-wide inv-timings" style="text-align:center;font-size:${Math.max(7, fontSize-3)}px;font-weight:700;margin-top:8px;padding-top:6px;border-top:1px dashed #000;white-space:pre-wrap;line-height:1.3;">${escapeHtml(s.shopTimingText)}</div>` : ''}
+      ${showFooter ? `<div class="inv-footer" style="text-align:center;font-size:${fontSize}px;font-weight:900;margin-top:8px;">${escapeHtml(s.invoiceFooter || '')}</div>` : ''}
       ${buildDeveloperCredit(s)}
     </div>
   `;

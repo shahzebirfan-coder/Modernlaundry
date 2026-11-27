@@ -182,10 +182,11 @@ const DB = {
       if (st && !st._thermalDefaults) {
         if (st.invoicePaper == null)    st.invoicePaper = '80';
         /* logo bara (client: "BRAND ka logo big karo, bohat chota hai") */
-        if (st.invoiceLogoSize == null || st._logoBigV !== 1) {
+        /* logo aur bara (client: "abi aur big karo") */
+        if (st.invoiceLogoSize == null || st._logoBigV !== 2) {
           st.invoiceLogoSize  = Math.max(+st.invoiceLogoSize || 0, 100);
-          st.invoiceLogoMaxMm = Math.max(+st.invoiceLogoMaxMm || 0, 32);
-          st._logoBigV = 1;
+          st.invoiceLogoMaxMm = Math.max(+st.invoiceLogoMaxMm || 0, 45);
+          st._logoBigV = 2;
         }
         if (st.invoiceLogoMono == null) st.invoiceLogoMono = true;
         if (st.invoiceMarginMm == null) st.invoiceMarginMm = 2;
@@ -319,7 +320,7 @@ const DB = {
         invoicePaper: '80',            // '58' = 58mm roll, '80' = 80mm roll
         invoiceLogoSize: 100,          // logo width as % of paper width (100 = poora header)
         invoiceLogoMono: true,         // 1-bit black & white for thermal heads
-        invoiceLogoMaxMm: 32,          // max logo height on paper (mm) — bara magar page na khaye
+        invoiceLogoMaxMm: 45,          // max logo height on paper (mm) — BARA logo (client request)
         invoiceLogoThreshold: 185,     // 1-bit cut-off: higher = bolder / keeps hairlines
         invoiceMarginMm: 2,            // page margin in mm
         _thermalDefaults: 1,           // marks that defaults were applied

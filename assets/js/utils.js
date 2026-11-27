@@ -529,7 +529,7 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .qty-circle .num { font-size: 30px !important; }
   .qty-circle .lbl { font-size: 8px !important; letter-spacing: .5px !important; }
   .del-type-pill { padding: 2px 10px !important; font-size: 11px !important; }
-  .inv-logo { max-height: 40mm !important; width: auto !important; }
+  .inv-logo { max-height: 56mm !important; width: auto !important; }
   hr { margin: 3px 0 !important; }
 
   /* === ONE PAGE RULE ===
@@ -569,7 +569,7 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .print-slip.cmp1 .invoice-page table td,
   .print-slip.cmp1 .invoice-page table th { padding: 1px 0 !important; }
   .print-slip.cmp1 .invoice-page table { line-height: 1.24 !important; }
-  .print-slip.cmp1 .inv-logo { max-height: 32mm !important; }
+  .print-slip.cmp1 .inv-logo { max-height: 46mm !important; }
   .print-slip.cmp1 hr { margin: 2px 0 !important; }
   .print-slip.cmp1 .inv-terms { margin-top: 4px !important; padding-top: 3px !important; }
   .print-slip.cmp1 .inv-terms-body > div { margin-bottom: 0 !important; }
@@ -578,27 +578,36 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .print-slip.cmp2 .invoice-page table td,
   .print-slip.cmp2 .invoice-page table th { padding: 0 !important; }
   .print-slip.cmp2 .invoice-page table { line-height: 1.16 !important; }
-  .print-slip.cmp2 .inv-logo { max-height: 26mm !important; }
+  .print-slip.cmp2 .inv-logo { max-height: 38mm !important; }
   .print-slip.cmp2 .inv-terms { margin-top: 3px !important; padding-top: 2px !important; }
-  .print-slip.cmp2 .inv-terms-head { font-size: 7.6px !important; margin-bottom: 2px !important; }
-  .print-slip.cmp2 .inv-terms-body { font-size: 6.8px !important; line-height: 1.16 !important; }
-  .print-slip.cmp2 .block-wide { font-size: 6.8px !important; line-height: 1.16 !important; }
+  .print-slip.cmp2 .inv-terms-head { font-size: 10px !important; margin-bottom: 3px !important; }
+  .print-slip.cmp2 .inv-terms-body { font-size: 9.6px !important; line-height: 1.26 !important; }
+  .print-slip.cmp2 .block-wide { font-size: 9.2px !important; line-height: 1.24 !important; }
   .print-slip.cmp2 .dev-credit { margin-top: 3px !important; padding-top: 2px !important; font-size: 7px !important; }
   .print-slip.cmp2 .dev-credit img { max-height: 9mm !important; }
 
-  .print-slip.cmp3 .inv-terms-body { font-size: 6.1px !important; line-height: 1.12 !important; }
-  .print-slip.cmp3 .inv-terms-head { font-size: 7.2px !important; }
-  .print-slip.cmp3 .block-wide { font-size: 6.2px !important; line-height: 1.12 !important; }
-  .print-slip.cmp3 .inv-logo { max-height: 20mm !important; }
+  .print-slip.cmp3 .inv-terms-body { font-size: 9.2px !important; line-height: 1.24 !important; }
+  .print-slip.cmp3 .inv-terms-head { font-size: 9.6px !important; }
+  .print-slip.cmp3 .block-wide { font-size: 8.8px !important; line-height: 1.22 !important; }
+  .print-slip.cmp3 .inv-logo { max-height: 30mm !important; }
   .print-slip.cmp3 .dev-credit { font-size: 6.4px !important; }
   .print-slip.cmp3 .invoice-page table { line-height: 1.12 !important; }
 
   /* === cmp4 — bahut bhari invoice: terms/timings/credit compact (par mojood) === */
-  .print-slip.cmp4 .inv-terms { margin-top: 2px !important; padding-top: 2px !important; }
-  .print-slip.cmp4 .inv-terms-head { font-size: 6.8px !important; margin-bottom: 1px !important; }
-  .print-slip.cmp4 .inv-terms-body { font-size: 5.7px !important; line-height: 1.1 !important; }
-  .print-slip.cmp4 .block-wide { font-size: 5.8px !important; line-height: 1.1 !important; }
-  .print-slip.cmp4 .inv-logo { max-height: 16mm !important; }
+  .print-slip.cmp4 .inv-terms { margin-top: 2px !important; padding-top: 1px !important; }
+  .print-slip.cmp4 .inv-terms-body > div { margin-bottom: 0 !important; }
+  .print-slip.cmp4 .inv-no-box { margin: 1px 0 3px !important; padding-bottom: 4px !important; }
+  .print-slip.cmp4 .inv-terms-head { font-size: 9.2px !important; margin-bottom: 2px !important; }
+  .print-slip.cmp4 .inv-terms-body { font-size: 8.8px !important; line-height: 1.22 !important; }
+  .print-slip.cmp4 .block-wide { font-size: 7.4px !important; line-height: 1.14 !important; }
+  .print-slip.cmp4 .inv-head { font-size: 9.2px !important; line-height: 1.15 !important; }
+  .print-slip.cmp4 .inv-footer { font-size: 9.5px !important; margin-top: 4px !important; }
+  .print-slip.cmp4 .inv-terms-body { font-size: 9.4px !important; line-height: 1.16 !important; }
+  .print-slip.cmp4 .inv-terms-head { font-size: 9.4px !important; margin-bottom: 2px !important; }
+  .print-slip.cmp4 .dev-credit { margin-top: 1px !important; padding-top: 1px !important; }
+  .print-slip.cmp4 .dev-credit img { max-height: 5mm !important; }
+  .print-slip.cmp4 .dev-credit::after { margin-top: 2px !important; padding-top: 1px !important; padding-bottom: 1px !important; }
+  .print-slip.cmp4 .inv-logo { max-height: 20mm !important; }
   .print-slip.cmp4 .invoice-page table { line-height: 1.08 !important; }
   .print-slip.cmp4 .dev-credit { font-size: 6px !important; margin-top: 2px !important; }
   .print-slip.cmp4 .dev-credit img { max-height: 7mm !important; }
@@ -617,15 +626,24 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
   .invoice-page > div { margin-top: 2px !important; margin-bottom: 2px !important; }
   .invoice-page { padding: 3px !important; }
   /* Logo BARA (client: "logo big karo, bohat chota hai") — par slip par qabza na kare */
-  .inv-logo { max-height: 40mm !important; width: auto !important; }
+  .inv-logo { max-height: 56mm !important; width: auto !important; }
   /* Terms: chhota par parhne ke qabil (isi liye credit + sab page 1 par aa jata hai) */
   .inv-terms { margin-top: 5px !important; padding-top: 4px !important; }
-  .inv-terms-head { font-size: 8.6px !important; margin-bottom: 4px !important; }
-  .inv-terms-body { font-size: 7.2px !important; line-height: 1.36 !important; }
+  /* TERMS — client: "bohat choti aari hain, due amount jitni readable ho".
+     Ab base 11px (bold) — thermal par saaf parhi jati hai. */
+  .inv-head { font-size: 9.6px !important; line-height: 1.2 !important; margin-bottom: 4px !important; }
+  .inv-no-box { margin: 2px 0 4px !important; }
+  .inv-footer { font-size: 12px !important; margin-top: 7px !important; }
+  .inv-timings { margin-top: 6px !important; padding-top: 4px !important; font-size: 9.5px !important; line-height: 1.25 !important; }
+  .inv-footer { font-size: 12px !important; margin-top: 7px !important; }
+  .inv-timings { margin-top: 6px !important; padding-top: 4px !important; font-size: 9.5px !important; line-height: 1.25 !important; }
+  .inv-terms-head { font-size: 11px !important; margin-bottom: 4px !important; letter-spacing: .4px !important; }
+  .inv-terms-body { font-size: 10.5px !important; line-height: 1.32 !important; font-weight: 700 !important; }
   .inv-terms-body > div { margin-bottom: 1px !important; }
   /* === ITEMS: ITEM | QTY | AMOUNT (client ki nayi layout) === */
   .invoice-page table.items-tbl { table-layout: fixed !important; width: 100% !important; }
-  .invoice-page table.items-tbl td.it-name { word-break: break-word !important; }
+  .invoice-page table.items-tbl td.it-name { word-break: break-word !important; line-height: 1.18 !important; }
+  .invoice-page table.items-tbl span.it-rate { display: block !important; font-size: 8px !important; font-weight: 400 !important; line-height: 1.1 !important; }
   .invoice-page table.items-tbl td.it-qty { text-align: center !important; white-space: nowrap !important; }
   .invoice-page table.items-tbl td.it-amt { text-align: right !important; white-space: nowrap !important; }
 
@@ -651,10 +669,10 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
     font-weight: 900;
     letter-spacing: .6px;
     color: #000;
-    margin-top: 7px;
-    padding-top: 4px;
+    margin-top: 5px;
+    padding-top: 3px;
     border-bottom: 2px dashed #000;
-    padding-bottom: 6px;
+    padding-bottom: 2px;
     white-space: nowrap;
   }
 
