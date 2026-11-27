@@ -1412,3 +1412,22 @@ phir page 2 Office copy me bhi same."*
 - Cut line content ke saath hi naapti hai (::after) — koi extra page nahi. Page count 2 hi rehta hai.
 - `tprintpages.js` me 5 naye asserts (21 ✓ total).
 
+### 20.2 Invoice layout upgrade (`?v=20261124.6` / sw `v61`)
+
+Client ki 6 requests — sab baked in (idempotent migration `_logoBigV`):
+
+| # | Request | Fix |
+|---|---|---|
+| 1 | "BRAND ka logo big karo, bohat chota hai" | `invoiceLogoSize` 70 → **100%**, `invoiceLogoMaxMm` 20 → **32mm**; print cap `.inv-logo max-height: 40mm` (cmp1 32, cmp2 26, cmp3 20, cmp4 16) |
+| 2 | "Booking/Delivery date kareeb kareeb" | kv table `table-layout:fixed` (46/54), har row `padding:5px`, `line-height:1.4` — saaf alag rows |
+| 3 | "Item ke barabar QTY ka column, phir amount" | Naya **ITEM \| QTY \| AMOUNT** (52%/16%/32%), rate `@ Rs. x` naam ke neeche chhote mein |
+| 4 | "Discount bhi dikhao — kitna diya" | `DISCOUNT (12.5% off)` + `− Rs. 130`; loyalty alag row; label sirf tab chhupta hai jab discount ho hi na |
+| 5 | "Shop timings Portal se" | `inv-timings` block — `settings.shopTimingText` (Portal → Shop Timings), default ON |
+| 6 | "Terms & Conditions bhi add karo" | `invoiceShowTerms` default **false → true**; 9 terms page 1 par |
+
+Plus: page-fit ab **5 compact levels** (cmp1…cmp4) + font step-down floor **65%**, target `297 − 14mm` safety taake **cut line hamesha page 1** par credit ke foran baad rahe.
+
+Naap (asli 72mm roll): 3 items → 1 page 275mm · 5 items → L4 · 8 items → L4 + font 91% · 12 items → 76%. Customer + office = 2 pages.
+
+`tprintpages.js` ab **28 ✓** (naye 7 asserts). Sab 16 suites + recovery green.
+Version: `?v=20261124.6`, sw `modern-dry-cleaners-pos-v61`.

@@ -1,7 +1,7 @@
 ========================================================================
    MODERN DRY CLEANERS  —  PRINT FIX
    "Bhoar sari invoice ek saath" + size ka masla — HAL HO GAYA
-   Version: ?v=20261124.5      Service worker: pos-v60
+   Version: ?v=20261124.6      Service worker: pos-v61
 ========================================================================
 
 AAP KA MASLA
@@ -57,6 +57,37 @@ CUT LINE (naya)
 * Ye line SIRF PRINT par aati hai. Customer ko WhatsApp/PDF wali copy me cut line
   nahi aati (wo saaf professional copy hai) — jaisa aap ne pehle kaha tha.
 * Is se page count nahi barhta — 2 pages hi rehte hain.
+
+
+NAYI INVOICE LAYOUT (aap ki requests)
+-------------------------------------
+1. LOGO BARA: brand ka logo ab poori chaurai (72mm) tak bara hota hai
+   (pehle 70% tha, ab 100% — height cap 40mm). Har invoice par saaf nazar aayega.
+
+2. BOOKING / DELIVERY DATE: rows ab khuli khuli aur saaf hain (padding barha,
+   line-height theek) — pehle "kareeb kareeb" chipke hue thay.
+
+3. ITEMS: ab 3 column hain —
+        ITEM                        QTY    AMOUNT
+        Shalwar Suit (Press)         3      Rs. 480
+        @ Rs. 160
+   Qty apne column me, amount apne column me. Rate chhote mein naam ke neeche.
+
+4. DISCOUNT: jab customer ko discount diya ho to saaf dikhta hai —
+        DISCOUNT (12.5% off)              − Rs. 130
+   Percent bhi, amount bhi. Loyalty discount ho to alag row.
+   Discount na ho to ye row aati hi nahi.
+
+5. SHOP TIMINGS: Portal ki setting se (Settings -> Shop Timings) —
+   yahan invoice par apne aap chhap jati hai. Portal me badlein, invoice par
+   wohi naya timing aayega.
+
+6. TERMS & CONDITIONS: 9 terms ab har invoice par (page 1, timings ke ooper).
+   Settings -> Invoice me se band bhi ki ja sakti hain (default ON).
+
+NOTE: Page 1 par sab kuch aata hai — logo, invoice no., PIECES, packaging,
+dates, customer, items (item/qty/amount), totals + discount, terms, timings,
+credit aur uske foran baad CUT LINE. Page 2 = OFFICE COPY (isi tarah).
 
 PRINT KARNE KA TAREEQA (yeh na badlein)
 ---------------------------------------
