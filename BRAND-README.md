@@ -1497,3 +1497,49 @@ Client ke 4 points (round 3):
 **Tests:** `tquickpicks.js` (**29 ✓**), `topeningbal.js` (**26 ✓**), `tprevbal.js` 9 ✓. Sab 18 suites + recovery green.
 
 Version: `?v=20261124.8`, sw `modern-dry-cleaners-pos-v63`.
+
+### 20.5 Purchase Order / Vendor Invoice — Thermal print (`?v=20261124.9` / sw `v64`)
+
+Client: *"purchase order mein print ka option hai — uski setting aisi karo ke thermal printer ke liye proper fit ho; abhi jo layout hai woh thermal ke liye design nahi."*
+
+**Root cause (kyun toota hua aata tha):** PO print `printElement()` se guzar raha tha jo **invoice** ki CSS inherit karti hai —
+`table td:first-child { width:46% } / td:last-child { width:54% }`, `.invoice-page` 520–700px, terms + `CUT HERE`
+aur 297mm fixed page. 4-column PO table par ye rules lagne se rate/amount bahar nikal jate the aur 3–4 page nikalte the.
+
+**Naya design — `buildPOSlip(po)` (thermal-first):**
+
+| Cheez | Purana | Ab |
+|---|---|---|
+| Layout | invoice CSS (520px) | `.po-slip` — **80mm** (58mm par `.po-58`), screen preview = print |
+| Columns | Qty/Rate/Amount bikhre hue | **ITEM 46% · QTY 12% · RATE 20% · AMOUNT 22%** (fixed, kuch cut nahi) |
+| Rang | purple/blue UI rang | sirf **black & white** (thermal 1-bit) |
+| Emoji | 🧺 📞 💰 | **hataye** (thermal emoji print nahi karta) |
+| Height | 3–4 page | content ke mutabiq: 2 items **77mm**, 12 items **115mm** (ek parchi) |
+| Cut | — | niche dashed **cut line** (roll wahin se katey) |
+| 58mm roll | — | Settings `invoicePaper:58` → slip khud patli |
+
+**Purani cheezein jo mojood hain:** shop logo (grayscale, 26mm), shop name + tagline + address/phone,
+PO No, date, vendor (naam/contact/phone), item-wise rows, `2 types • 46 pcs`, TOTAL / Paid / DUE / Status,
+notes, vendor + authorized signature line, footer.
+
+**Weekly Vendor Invoice** bhi wahi thermal slip: item-wise summary (4 columns) + PO list 3 columns
+(PO/date • qty • total) + GRAND TOTAL / Paid / OUTSTANDING. Purana 700px 6-column layout gaya.
+
+**Print engine (`utils.js`):** naya `docSheet: true` mode —
+`printElement(el, { docSheet: true })` → clone se `invoice-page` class hatti hai, `body.doc-sheet` +
+`#printArea.doc-sheet` lagti hai, jis se invoice ke 46/54 column, terms aur `CUT HERE` rules **band** ho jate hain
+(PO ki apni `po-items` / `po-kv` tables safe rehti hain). Invoice print bilkul waisa hi hai — 18 suites green.
+
+**Naap (asli 80mm roll, WeasyPrint proof):**
+```
+2 items, note ke sath   → 1 page, content 77 mm   (kaghaz 77mm)
+12 items, note ke sath  → 1 page, content 115 mm
+right edge overflow     → 0 (koi text cut nahi)
+```
+
+**Files:** `pages/purchaseOrders.js` (`buildPOSlip`, naya `openPOInvoice`, naya `showWeeklyInvoice`),
+`assets/css/style.css` (PO slip block + print block), `assets/js/utils.js` (docSheet mode).
+**Tests:** `tposlip.js` **31 ✓**, `tposlip58.js` **9 ✓**. Sab 20 suites + recovery green.
+**Preview:** `preview/po-thermal-preview.html` (80mm + 58mm side by side).
+
+Version: `?v=20261124.9`, sw `modern-dry-cleaners-pos-v64`.
