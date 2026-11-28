@@ -351,6 +351,23 @@ async function printElement(elementOrSelector, options) {
   });
   await Promise.all(imagePromises);
 
+  /* === Doc sheet ya invoice? ===
+     Invoice = items/qty/amount + terms + cut line wali slip (dono copies).
+     Baqi sab (purchase order, weekly vendor invoice, challan, receipt, Z-report,
+     claim, task board) DOC SHEET hai — in par invoice ke column/cut rules
+     lagane se thermal par layout bikharta hai. */
+  let docSheet = (options.docSheet === true) || (options.paper === 'doc');
+  if (!docSheet) {
+    try {
+      if (el && el.closest) {
+        if (el.closest('.doc-sheet, .po-slip, .po-print, .challan-slip')) docSheet = true;
+        else if (el.classList && (el.classList.contains('po-slip') || el.classList.contains('doc-sheet') || el.classList.contains('challan-slip'))) docSheet = true;
+      }
+    } catch (e) {}
+  }
+  clone.classList.add(docSheet ? 'doc-sheet' : 'invoice-doc');
+  if (docSheet && clone.classList.contains('invoice-page')) clone.classList.remove('invoice-page');
+
   // Step 2b: thermal printers cannot render emoji — strip them
   let paper = '80', marginMm = 2, isThermal = true, rawPaperMm = 0;
   try {
@@ -420,10 +437,34 @@ async function printElement(elementOrSelector, options) {
   // print preview ko `about:blank` par atka deta hai (client ke yahan yahi hua) —
   // print dialog khulta hai magar settings load nahi hotin aur Print button dead ho jata hai.
   // Ab hidden iframe use karte hain: same-origin, koi popup blocker nahi, koi blank page nahi.
-  const printDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  /* Doc sheets ke liye bhi ek fixed page height — "size: 80mm auto" Chrome me
+     3-page bug deta hai (pehle invoice par yahi hua tha). 297mm roll par doc
+     sheet ka content chhota rehta hai, is liye ek hi parchi nikal kar roll
+     wahin se kaat liya jata hai. */
+  const printDoc = `<!DOCTYPE html><html class="${docSheet ? 'doc-sheet' : 'invoice-doc'}"><head><meta charset="UTF-8">
 <title>${options.title || 'Print'}</title>
 <style>
 ${styleText}
+/* === DOOSRI DOCUMENTS (Purchase Order, challan, receipt, Z-report...)
+   Ye invoice NAHI hain. Invoice wali columns (items 46/54, terms, cut line)
+   in par lagti hain to thermal par layout bikharta hai (client ka masla:
+   "purchase order ka print thermal ke liye proper design nahi").
+   Is liye jab body par .doc-sheet class ho to invoice rules band ho jate hain. */
+/* ⚠️ Sirf WOH tables jinki columns apni CSS se set hain (po-items / po-kv) unhe
+   chhorein — warna PO ke 4 columns dobara bigar jayenge. */
+body.doc-sheet #printArea table:not(.po-items):not(.po-kv) td:first-child,
+body.doc-sheet #printArea table:not(.po-items):not(.po-kv) th:first-child,
+body.doc-sheet #printArea table:not(.po-items):not(.po-kv) td:last-child,
+body.doc-sheet #printArea table:not(.po-items):not(.po-kv) th:last-child {
+  width: auto !important;
+}
+body.doc-sheet #printArea table td:last-child,
+body.doc-sheet #printArea .amt { text-align: right !important; }
+body.doc-sheet #printArea .print-slip .dev-credit::after { content: none !important; display: none !important; }
+body.doc-sheet #printArea .print-slip { break-after: auto !important; page-break-after: auto !important; }
+body.doc-sheet #printArea .invoice-page h2 { font-size: 15px !important; letter-spacing: .2px !important; }
+body.doc-sheet #printArea .no-print { display: none !important; }
+
 /* === Print overrides — MAX VISIBILITY === */
 * { box-sizing: border-box; }
 html, body {
@@ -512,6 +553,10 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
      "3 sheets of paper" bana deta tha. Aur "594mm" (do copy ek page) print dialog me
      ghair-mamooli paper dikhata tha. Ab: HAR COPY = 297mm (ek roll page). */
   @page { size: ${rawPaperMm || paper}mm 297mm; margin: 0 !important; }
+  /* 🡒 Doc sheets par height lock NAHI — thermal roll par content jitna
+     kaghaz kharch ho utna hi (ek PO = ek chhoti parchi). */
+  #printArea.doc-sheet, #printArea.doc-sheet * { max-height: none !important; }
+  #printArea.doc-sheet .print-slip { height: auto !important; }
 
   /* === COMPACT RECEIPT ===
      Thermal roll par kaghaz bachane + text bara dikhane ke liye spacing tight:
@@ -697,7 +742,7 @@ img, canvas, svg { max-width: 100% !important; height: auto !important; }
 }
 </style>
 </head><body>
-<div id="printArea">${html}</div>
+<div id="printArea" class="${docSheet ? 'doc-sheet' : ''}">${html}</div>
 </body></html>`;
 
   /* ---------- iframe-based printing (popup-free) ---------- */

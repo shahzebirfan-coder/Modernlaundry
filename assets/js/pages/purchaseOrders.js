@@ -307,61 +307,133 @@ function openPOPayment(poId) {
   }});
 }
 
-/* ===== View / Print single PO Invoice ===== */
+/* ============================================================
+   PURCHASE ORDER — THERMAL (58/80mm) SLIP
+   ============================================================
+   Client: "purchase order mein print ka option hai — uski setting aisi karo ke
+   thermal printer ke liye proper fit ho; abhi jo layout hai woh thermal ke liye
+   design nahi hai."
+
+   Purana masla (kya ghalat tha):
+   • PO print invoice wali CSS inherit kar raha tha — items table par 46%/54%
+     column rule, terms/cut-line, 520px max-width, bara centred logo. 80mm roll
+     par sab kuch toot kar 3-4 page banta tha.
+   • Item ka rate aur qty columns bahar nikal jate the.
+   • Roll 52 pcs / 12 items par bhi bekaar kaghaz kharch karta tha.
+
+   Ab: dedicated `.po-slip` (monochrome, 4 fixed columns, natural height),
+   printElement() ko `docSheet: true` ke sath diya jata hai — invoice rules band. */
+
+/* Ek PO ka thermal slip markup (view modal + print + WhatsApp sab isi se) */
+function buildPOSlip(po, opts) {
+  opts = opts || {};
+  const v = (typeof DB.get === 'function' ? DB.get('vendors', po.vendorId) : null) || { name: '-' };
+  const s = DB.settings();
+  const esc = (x) => (typeof escapeHtml === 'function' ? escapeHtml(x == null ? '' : x) : String(x == null ? '' : x));
+  const money = (x) => 'Rs. ' + (Math.round(+x || 0)).toLocaleString('en-PK');
+
+  const items = Array.isArray(po.items) ? po.items : [];
+  const totalQty = items.reduce((n, it) => n + (+it.qty || 0), 0);
+  const totalTypes = items.length;
+
+  /* 4 columns: ITEM (flex) | QTY | RATE | AMOUNT — thermal ki asli chaurai ke liye */
+  const itemRows = items.map((it, i) => `
+    <tr>
+      <td class="po-it">${i + 1}. ${esc(it.name)}</td>
+      <td class="po-qty">${esc(it.qty)}</td>
+      <td class="po-rate">${money(it.rate)}</td>
+      <td class="po-amt">${money((+it.qty || 0) * (+it.rate || 0))}</td>
+    </tr>`).join('');
+
+  const logoHtml = s.logoImage
+    ? `<div class="po-logo"><img src="${s.logoImage}" alt=""/></div>`
+    : (s.logo ? `<div class="po-logo po-logo-emoji">${s.logo}</div>` : '');
+
+  /* printer ki paper width (Settings → Invoice/Print) ke mutabiq slip chaurai */
+  const narrow = (String(s.invoicePaper || '') === '58') ? ' po-58' : '';
+  return `
+  <div class="po-slip doc-sheet${narrow}">
+    ${logoHtml}
+    <div class="po-shop">${esc(s.shopName || 'MODERN DRY CLEANERS')}</div>
+    <div class="po-shop-sub">${esc(s.tagline || '')}</div>
+    <div class="po-shop-meta">${esc(s.address || '')}${s.phone ? ' • ' + esc(s.phone) : ''}</div>
+    <div class="po-rule"></div>
+
+    <div class="po-title">PURCHASE ORDER</div>
+    <div class="po-rule"></div>
+
+    <table class="po-kv">
+      <tr><td class="po-kv-l">PO No</td><td class="po-kv-v po-no">${esc(po.poNo)}</td></tr>
+      <tr><td class="po-kv-l">Date</td><td class="po-kv-v">${esc(po.date)}</td></tr>
+      <tr><td class="po-kv-l">Vendor</td><td class="po-kv-v">${esc(v.name)}</td></tr>
+      ${v.contactPerson ? `<tr><td class="po-kv-l">Contact</td><td class="po-kv-v">${esc(v.contactPerson)}</td></tr>` : ''}
+      ${v.phone ? `<tr><td class="po-kv-l">Phone</td><td class="po-kv-v">${esc(v.phone)}</td></tr>` : ''}
+    </table>
+    <div class="po-rule"></div>
+
+    <table class="po-items">
+      <thead>
+        <tr>
+          <th class="po-it">ITEM</th>
+          <th class="po-qty">QTY</th>
+          <th class="po-rate">RATE</th>
+          <th class="po-amt">AMOUNT</th>
+        </tr>
+      </thead>
+      <tbody>${itemRows || `<tr><td colspan="4" class="po-empty">Koi item nahi</td></tr>`}</tbody>
+    </table>
+    <div class="po-rule"></div>
+
+    <table class="po-kv po-totals">
+      <tr><td class="po-kv-l">Items</td><td class="po-kv-v">${totalTypes} types • ${totalQty} pcs</td></tr>
+      <tr class="po-grand"><td class="po-kv-l">TOTAL</td><td class="po-kv-v">${money(po.total)}</td></tr>
+      <tr><td class="po-kv-l">Paid</td><td class="po-kv-v">${money(po.paid)}</td></tr>
+      ${(+po.due || 0) > 0 ? `<tr class="po-due"><td class="po-kv-l">DUE</td><td class="po-kv-v">${money(po.due)}</td></tr>` : ''}
+      <tr><td class="po-kv-l">Status</td><td class="po-kv-v">${esc(String(po.status || '').toUpperCase())}</td></tr>
+    </table>
+
+    ${po.notes ? `<div class="po-rule"></div><div class="po-notes">Note: ${esc(po.notes)}</div>` : ''}
+
+    <div class="po-rule"></div>
+    <div class="po-sign">
+      <span>Vendor Signature</span>
+      <span>Authorized</span>
+    </div>
+    <div class="po-foot">${esc(s.shopName || '')} • Generated ${esc(new Date().toLocaleDateString('en-GB'))}</div>
+    ${opts.cutLine === false ? '' : '<div class="po-cut">- - - - - - - - - - - - - - -</div>'}
+  </div>`;
+}
+
+/* View + Print modal */
 function openPOInvoice(poId, autoPrint) {
   const po = DB.get('purchaseOrders', poId);
   if (!po) return;
-  const v = DB.get('vendors', po.vendorId) || { name:'-' };
-  const s = DB.settings();
-  const itemsHtml = po.items.map(it => `
-    <tr>
-      <td>${escapeHtml(it.name)}</td>
-      <td style="text-align:center;">${it.qty}</td>
-      <td style="text-align:right;">${fmtMoney(it.rate)}</td>
-      <td style="text-align:right;"><b>${fmtMoney(it.qty*it.rate)}</b></td>
-    </tr>
-  `).join('');
+  const slip = buildPOSlip(po);
 
   openModal(`
-    <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <h3>📑 Purchase Order ${escapeHtml(po.poNo)}</h3>
+    <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
+      <h3 style="margin:0;">📑 Purchase Order ${escapeHtml(po.poNo)}</h3>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-secondary btn-sm" onclick="printElement(this.closest('.modal').querySelector('.invoice-page') || this.closest('.modal').querySelector('#printArea'))">🖨️ Print</button>
+        <button class="btn btn-secondary btn-sm" id="poPrintBtn">🖨️ Print (Thermal)</button>
         <button class="btn btn-ghost btn-sm" onclick="closeModal()">Close</button>
       </div>
     </div>
-    <div class="invoice-page" id="invoiceArea" style="max-width:520px;font-family:Arial;">
-      ${s.logoImage ? `<div style="text-align:center;margin-bottom:8px;"><img src="${s.logoImage}" style="max-width:140px;max-height:90px;object-fit:contain;background:#000;padding:6px;border-radius:6px;"/></div>` : `<div style="text-align:center;font-size:42px;">${s.logo||'🧺'}</div>`}
-      <h2 style="text-align:center;">${escapeHtml(s.shopName)}</h2>
-      <div style="text-align:center;font-size:11px;">${escapeHtml(s.address||'')} • 📞 ${escapeHtml(s.phone||'')}</div>
-      <div class="line"></div>
-      <div style="text-align:center;font-weight:700;font-size:16px;">PURCHASE ORDER</div>
-      <div class="line"></div>
-      <table style="font-size:12px;">
-        <tr><td><b>PO Number:</b></td><td style="text-align:right;">${escapeHtml(po.poNo)}</td></tr>
-        <tr><td><b>Date:</b></td><td style="text-align:right;">${escapeHtml(po.date)}</td></tr>
-        <tr><td><b>Vendor:</b></td><td style="text-align:right;">${escapeHtml(v.name)}</td></tr>
-        ${v.phone?`<tr><td><b>Phone:</b></td><td style="text-align:right;">${escapeHtml(v.phone)}</td></tr>`:''}
-        ${v.contactPerson?`<tr><td><b>Contact:</b></td><td style="text-align:right;">${escapeHtml(v.contactPerson)}</td></tr>`:''}
-      </table>
-      <div class="line"></div>
-      <table style="font-size:12px;width:100%;">
-        <thead style="border-bottom:1px solid #000;"><tr><th style="text-align:left;">Item</th><th>Qty</th><th style="text-align:right;">Rate</th><th style="text-align:right;">Amount</th></tr></thead>
-        <tbody>${itemsHtml}</tbody>
-      </table>
-      <div class="line"></div>
-      <table style="font-size:12px;">
-        <tr><td><b>TOTAL:</b></td><td style="text-align:right;font-size:14px;"><b>${fmtMoney(po.total)}</b></td></tr>
-        <tr><td>Paid:</td><td style="text-align:right;">${fmtMoney(po.paid)}</td></tr>
-        ${po.due>0?`<tr><td><b>Due:</b></td><td style="text-align:right;color:#a00;"><b>${fmtMoney(po.due)}</b></td></tr>`:''}
-        <tr><td>Status:</td><td style="text-align:right;text-transform:uppercase;"><b>${po.status}</b></td></tr>
-      </table>
-      ${po.notes?`<div class="line"></div><div style="font-size:11px;font-style:italic;">📝 ${escapeHtml(po.notes)}</div>`:''}
-      <div class="line"></div>
-      <div style="text-align:center;font-size:10px;margin-top:8px;color:#666;">Generated by Modern Dry Cleaners</div>
+    <div class="po-preview-wrap" style="background:#eef1f6;padding:14px;border-radius:12px;display:flex;justify-content:center;">
+      ${slip}
     </div>
-  `, { large: true, onOpen(){
-    if (autoPrint) setTimeout(() => { const inv = document.querySelector(".modal .invoice-page") || document.querySelector("#printArea"); if (inv) printElement(inv); }, 300);
+    <div class="no-print" style="font-size:11.5px;color:#475569;margin:8px 0 0;text-align:center;font-weight:600;">
+      Roll: ${escapeHtml(String(DB.settings().invoicePaper || '80'))}mm thermal • Slip ki chaurai Settings → Print se aati hai (58mm chunain to slip khud patli ho jati hai)
+    </div>
+  `, { large: true, onOpen(m) {
+      const btn = m.querySelector('#poPrintBtn');
+      if (btn) btn.onclick = () => {
+        const el = m.querySelector('.po-slip');
+        /* docSheet = true → invoice ke 46/54 column + cut-line rules band */
+        if (typeof printElement === 'function') printElement(el, { title: 'Purchase Order ' + po.poNo, docSheet: true });
+      };
+      if (autoPrint && typeof printElement === 'function') {
+        setTimeout(() => printElement(m.querySelector('.po-slip'), { title: 'Purchase Order ' + po.poNo, docSheet: true }), 250);
+      }
   }});
 }
 
@@ -425,95 +497,116 @@ function openWeeklyInvoiceDialog() {
 function showWeeklyInvoice(vendorId, from, to) {
   const v = DB.get('vendors', vendorId);
   const s = DB.settings();
-  const pos = DB.all('purchaseOrders').filter(p => p.vendorId === vendorId && p.date >= from && p.date <= to)
-    .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  const esc = (x) => (typeof escapeHtml === 'function' ? escapeHtml(x == null ? '' : x) : String(x == null ? '' : x));
+  const money = (x) => 'Rs. ' + (Math.round(+x || 0)).toLocaleString('en-PK');
 
-  if (!pos.length) {
-    toast('No purchase orders in this date range','warning');
-    return;
-  }
+  const pos = DB.all('purchaseOrders')
+    .filter(p => p.vendorId === vendorId && p.date >= from && p.date <= to)
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
-  // Aggregate by item name
+  if (!pos.length) { toast('No purchase orders in this date range', 'warning'); return; }
+
+  /* item-wise summary (same naam + rate ek line me) */
   const itemSummary = {};
   let grandTotal = 0, grandPaid = 0;
   pos.forEach(p => {
-    grandTotal += p.total;
-    grandPaid += p.paid;
-    p.items.forEach(it => {
+    grandTotal += (+p.total || 0);
+    grandPaid += (+p.paid || 0);
+    (p.items || []).forEach(it => {
       const k = it.name + '|' + it.rate;
       if (!itemSummary[k]) itemSummary[k] = { name: it.name, rate: it.rate, qty: 0, total: 0 };
-      itemSummary[k].qty += it.qty;
-      itemSummary[k].total += it.qty * it.rate;
+      itemSummary[k].qty += (+it.qty || 0);
+      itemSummary[k].total += (+it.qty || 0) * (+it.rate || 0);
     });
   });
   const grandDue = grandTotal - grandPaid;
 
-  const summaryHtml = Object.values(itemSummary).map(s => `
+  /* Thermal ke liye 4 columns: ITEM | QTY | RATE | AMOUNT */
+  const summaryHtml = Object.values(itemSummary).map((x, i) => `
     <tr>
-      <td>${escapeHtml(s.name)}</td>
-      <td style="text-align:center;">${s.qty}</td>
-      <td style="text-align:right;">${fmtMoney(s.rate)}</td>
-      <td style="text-align:right;"><b>${fmtMoney(s.total)}</b></td>
-    </tr>
-  `).join('');
+      <td class="po-it">${i + 1}. ${esc(x.name)}</td>
+      <td class="po-qty">${x.qty}</td>
+      <td class="po-rate">${money(x.rate)}</td>
+      <td class="po-amt">${money(x.total)}</td>
+    </tr>`).join('');
 
-  const posListHtml = pos.map(p => `
-    <tr>
-      <td>${escapeHtml(p.poNo)}</td>
-      <td>${escapeHtml(p.date)}</td>
-      <td style="text-align:center;">${p.items.reduce((s,i)=>s+i.qty,0)} pcs</td>
-      <td style="text-align:right;">${fmtMoney(p.total)}</td>
-      <td style="text-align:right;">${fmtMoney(p.paid)}</td>
-      <td style="text-align:right;color:${p.due>0?'#a00':'#080'};">${fmtMoney(p.due)}</td>
-    </tr>
-  `).join('');
+  /* PO list — thermal par 6 columns namumkin the; ab 3: PO+date | qty | total */
+  const poListHtml = pos.map(p => {
+    const q = (p.items || []).reduce((n, i) => n + (+i.qty || 0), 0);
+    return `<tr>
+      <td class="po-it"><b>${esc(p.poNo)}</b><br><span class="po-sub">${esc(p.date)}</span></td>
+      <td class="po-qty">${q}</td>
+      <td class="po-amt">${money(p.total)}</td>
+    </tr>`;
+  }).join('');
+
+  const slipHtml = `
+  <div class="po-slip doc-sheet">
+    ${s.logoImage ? `<div class="po-logo"><img src="${s.logoImage}" alt=""/></div>` : (s.logo ? `<div class="po-logo po-logo-emoji">${s.logo}</div>` : '')}
+    <div class="po-shop">${esc(s.shopName || 'MODERN DRY CLEANERS')}</div>
+    <div class="po-shop-meta">${esc(s.address || '')}${s.phone ? ' • ' + esc(s.phone) : ''}</div>
+    <div class="po-rule"></div>
+    <div class="po-title">VENDOR INVOICE</div>
+    <div class="po-subtitle">Weekly Summary</div>
+    <div class="po-rule"></div>
+
+    <table class="po-kv">
+      <tr><td class="po-kv-l">Vendor</td><td class="po-kv-v">${esc(v.name)}</td></tr>
+      ${v.contactPerson ? `<tr><td class="po-kv-l">Contact</td><td class="po-kv-v">${esc(v.contactPerson)}</td></tr>` : ''}
+      ${v.phone ? `<tr><td class="po-kv-l">Phone</td><td class="po-kv-v">${esc(v.phone)}</td></tr>` : ''}
+      <tr><td class="po-kv-l">Period</td><td class="po-kv-v">${esc(from)} → ${esc(to)}</td></tr>
+      <tr><td class="po-kv-l">POs</td><td class="po-kv-v">${pos.length}</td></tr>
+      <tr><td class="po-kv-l">Printed</td><td class="po-kv-v">${esc(isoDay())}</td></tr>
+    </table>
+    <div class="po-rule"></div>
+
+    <div class="po-sec">ITEM SUMMARY</div>
+    <table class="po-items">
+      <thead><tr>
+        <th class="po-it">ITEM</th><th class="po-qty">QTY</th><th class="po-rate">RATE</th><th class="po-amt">AMOUNT</th>
+      </tr></thead>
+      <tbody>${summaryHtml}</tbody>
+    </table>
+    <div class="po-rule"></div>
+
+    <div class="po-sec">PURCHASE ORDERS (${pos.length})</div>
+    <table class="po-items po-polist">
+      <thead><tr><th class="po-it">PO / DATE</th><th class="po-qty">QTY</th><th class="po-amt">TOTAL</th></tr></thead>
+      <tbody>${poListHtml}</tbody>
+    </table>
+    <div class="po-rule"></div>
+
+    <table class="po-kv po-totals">
+      <tr class="po-grand"><td class="po-kv-l">GRAND TOTAL</td><td class="po-kv-v">${money(grandTotal)}</td></tr>
+      <tr><td class="po-kv-l">Paid</td><td class="po-kv-v">${money(grandPaid)}</td></tr>
+      <tr class="${grandDue > 0 ? 'po-due' : ''}"><td class="po-kv-l">OUTSTANDING</td><td class="po-kv-v">${money(grandDue)}</td></tr>
+    </table>
+
+    <div class="po-rule"></div>
+    <div class="po-sign"><span>Vendor Signature</span><span>Authorized</span></div>
+    <div class="po-foot">${esc(s.shopName || '')} • Generated ${esc(new Date().toLocaleDateString('en-GB'))}</div>
+    <div class="po-cut">- - - - - - - - - - - - - - -</div>
+  </div>`;
 
   openModal(`
-    <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <h3>🧾 Weekly Invoice — ${escapeHtml(v.name)}</h3>
+    <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap;">
+      <h3 style="margin:0;">🧾 Weekly Invoice — ${esc(v.name)}</h3>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-secondary btn-sm" onclick="printElement(this.closest('.modal').querySelector('.invoice-page') || this.closest('.modal').querySelector('#printArea'))">🖨️ Print</button>
+        <button class="btn btn-secondary btn-sm" id="poWeekPrintBtn">🖨️ Print (Thermal)</button>
         <button class="btn btn-ghost btn-sm" onclick="closeModal()">Close</button>
       </div>
     </div>
-    <div class="invoice-page" id="invoiceArea" style="max-width:700px;font-family:Arial;">
-      ${s.logoImage ? `<div style="text-align:center;margin-bottom:8px;"><img src="${s.logoImage}" style="max-width:140px;max-height:90px;object-fit:contain;background:#000;padding:6px;border-radius:6px;"/></div>` : `<div style="text-align:center;font-size:42px;">${s.logo||'🧺'}</div>`}
-      <h2 style="text-align:center;">${escapeHtml(s.shopName)}</h2>
-      <div style="text-align:center;font-size:11px;">${escapeHtml(s.address||'')} • 📞 ${escapeHtml(s.phone||'')}</div>
-      <div class="line"></div>
-      <div style="text-align:center;font-weight:700;font-size:18px;">VENDOR INVOICE (Weekly Summary)</div>
-      <div class="line"></div>
-
-      <table style="font-size:12px;width:100%;">
-        <tr>
-          <td style="vertical-align:top;width:50%;"><b>Vendor:</b><br>🏭 ${escapeHtml(v.name)}<br>${escapeHtml(v.contactPerson||'')}<br>${escapeHtml(v.phone||'')}<br>${escapeHtml(v.address||'')}</td>
-          <td style="vertical-align:top;text-align:right;width:50%;"><b>Period:</b><br>${escapeHtml(from)} → ${escapeHtml(to)}<br><b>Invoice Date:</b> ${isoDay()}<br><b>Total POs:</b> ${pos.length}</td>
-        </tr>
-      </table>
-      <div class="line"></div>
-
-      <div style="font-weight:700;margin:8px 0;">Item Summary</div>
-      <table style="font-size:12px;width:100%;">
-        <thead style="border-bottom:1px solid #000;"><tr><th style="text-align:left;">Item</th><th>Total Qty</th><th style="text-align:right;">Rate</th><th style="text-align:right;">Amount</th></tr></thead>
-        <tbody>${summaryHtml}</tbody>
-      </table>
-      <div class="line"></div>
-
-      <div style="font-weight:700;margin:8px 0;">Purchase Orders in this Period</div>
-      <table style="font-size:11px;width:100%;">
-        <thead style="border-bottom:1px solid #000;"><tr><th style="text-align:left;">PO#</th><th>Date</th><th>Qty</th><th style="text-align:right;">Total</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Due</th></tr></thead>
-        <tbody>${posListHtml}</tbody>
-      </table>
-      <div class="line"></div>
-
-      <table style="font-size:13px;width:100%;">
-        <tr><td><b>GRAND TOTAL:</b></td><td style="text-align:right;font-size:16px;"><b>${fmtMoney(grandTotal)}</b></td></tr>
-        <tr><td>Total Paid:</td><td style="text-align:right;color:#080;">${fmtMoney(grandPaid)}</td></tr>
-        <tr><td><b>OUTSTANDING BALANCE:</b></td><td style="text-align:right;color:${grandDue>0?'#a00':'#080'};font-size:16px;"><b>${fmtMoney(grandDue)}</b></td></tr>
-      </table>
-      <div class="line"></div>
-      <div style="text-align:center;font-size:11px;font-style:italic;">Authorized Signature: _______________________</div>
-      <div style="text-align:center;font-size:10px;margin-top:14px;color:#666;">Generated on ${new Date().toLocaleString()} by Modern Dry Cleaners</div>
+    <div class="po-preview-wrap" style="background:#eef1f6;padding:14px;border-radius:12px;display:flex;justify-content:center;">
+      ${slipHtml}
     </div>
-  `, { large: true });
+    <div class="no-print" style="font-size:11.5px;color:#475569;margin:8px 0 0;text-align:center;font-weight:600;">
+      Roll: ${escapeHtml(String(DB.settings().invoicePaper || '80'))}mm thermal • Slip ki chaurai Settings → Print se aati hai (58mm chunain to slip khud patli ho jati hai)
+    </div>
+  `, { large: true, onOpen(m) {
+      const btn = m.querySelector('#poWeekPrintBtn');
+      if (btn) btn.onclick = () => {
+        if (typeof printElement === 'function')
+          printElement(m.querySelector('.po-slip'), { title: 'Vendor Invoice ' + v.name, docSheet: true });
+      };
+  }});
 }
